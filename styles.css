@@ -405,3 +405,19 @@
   .inventory-location-action h4,.inventory-location-action label,.inventory-location-action .inventory-add-row,.inventory-location-action > .btn-add,.inventory-location-action .inventory-average-help,.inventory-purchase-fields { grid-column:auto; }
   .inventory-purchase-fields { grid-template-columns:1fr 1fr; }
 }
+.cierre-perfume-row { display:grid; grid-template-columns:58px minmax(0,1fr) 92px; align-items:center; gap:10px; margin:7px 0; padding:8px; border:1px solid var(--border); border-radius:10px; background:rgba(2,19,38,.38); }
+.cierre-perfume-row > img { width:56px; height:56px; object-fit:cover; border-radius:8px; background:rgba(255,255,255,.06); }
+.cierre-perfume-nombre { min-width:0; display:flex; flex-direction:column; gap:4px; }
+.cierre-perfume-nombre strong { color:var(--ivory); overflow-wrap:anywhere; }
+.cierre-perfume-nombre small { color:var(--muted); }
+.cierre-perfume-nombre .cierre-perfume-actividad { color:var(--gold-light); font-size:.68rem; line-height:1.3; overflow-wrap:anywhere; }
+.cierre-perfume-row label { margin:0; font-size:.72rem; }
+.cierre-perfume-row input { width:100%; min-height:42px; margin-top:4px; padding:8px; text-align:center; }
+.cierre-sin-stock { margin:8px 0; padding:12px; border:1px dashed var(--border); border-radius:9px; color:var(--muted); text-align:center; }
+@media (max-width:420px) {
+  .cierre-perfume-row { grid-template-columns:48px minmax(0,1fr) 76px; gap:7px; padding:7px; }
+  .cierre-perfume-row > img { width:46px; height:46px; }
+  .cierre-perfume-nombre strong { font-size:.82rem; }
+  .cierre-perfume-row label { font-size:.66rem; }
+  .cierre-perfume-row input { min-height:40px; padding:6px 4px; }
+}
