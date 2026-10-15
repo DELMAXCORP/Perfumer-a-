@@ -25,6 +25,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     let usuarioActual = null;
     let cierresInventarioCache = [];
     let listaProductos = [];
+    const aperturasEnProceso = new Set();
     let gruposAbiertosInventario = [];
     let carritoVenta = [];
     let comprobanteBase64 = null;
@@ -540,7 +541,9 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
           resultado.push(producto);
           return resultado;
         }
-        const clave = `${producto.tipo}|${normalizarTexto(producto.nombre).trim()}|${normalizarTexto(producto.tamano || '')}`;
+        const nombreCanonico = normalizarTexto(producto.nombre).replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/[^a-z0-9]/g, '');
+        const capacidadCanonica = parseInt(String(producto.tamano || '').replace(/[^0-9]/g, ''), 10) || 100;
+        const clave = `${producto.tipo}|${nombreCanonico}|${capacidadCanonica}`;
         let grupo = gruposAbiertos.get(clave);
         if (!grupo) {
           grupo = {
@@ -1032,20 +1035,26 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
 
     async function abrirPerfumeSellado(idSellado) {
+      const llaveApertura = String(idSellado);
+      if (aperturasEnProceso.has(llaveApertura)) return;
       const perfumeSelladoObj = listaProductos.find(p => p.id === idSellado);
       if (!perfumeSelladoObj || perfumeSelladoObj.stock < 1) return alert('No hay stock disponible para abrir.');
+      aperturasEnProceso.add(llaveApertura);
+      try {
+        const ubicacionElegida = prompt(`¿Dónde estará el frasco abierto de "${perfumeSelladoObj.nombre}"?\n\n1. Tienda Local\n2. Alpha Móvil\n3. Barbería`, '1');
+        if (ubicacionElegida === null) return;
+        const ubicacion = ubicacionElegida.trim() === '1' ? 'Tienda Local' : ubicacionElegida.trim() === '2' ? 'Alpha Móvil' : ubicacionElegida.trim() === '3' ? 'Barbería' : null;
+        if (!ubicacion) return alert('Selecciona 1, 2 o 3 para elegir una ubicación válida.');
 
-      const ubicacionElegida = prompt(`¿Dónde estará el frasco abierto de "${perfumeSelladoObj.nombre}"?\n\n1. Tienda Local\n2. Alpha Móvil\n3. Barbería`, '1');
-      if (ubicacionElegida === null) return;
-      const ubicacion = ubicacionElegida.trim() === '1' ? 'Tienda Local' : ubicacionElegida.trim() === '2' ? 'Alpha Móvil' : ubicacionElegida.trim() === '3' ? 'Barbería' : null;
-      if (!ubicacion) return alert('Selecciona 1, 2 o 3 para elegir una ubicación válida.');
+        const stockAnterior = Number(perfumeSelladoObj.stock);
+        const nuevoStockSellado = stockAnterior - 1;
+        const { data: selladoActualizado, error: err1 } = await client.from('productos').update({ stock: nuevoStockSellado })
+          .eq('id', idSellado).eq('stock', stockAnterior).select('id').maybeSingle();
+        if (err1) return alert('Error al actualizar stock sellado: ' + err1.message);
+        if (!selladoActualizado) return alert('El stock cambió mientras abrías el perfume. Actualiza el inventario y vuelve a intentarlo.');
 
-      const nuevoStockSellado = perfumeSelladoObj.stock - 1;
-      const { error: err1 } = await client.from('productos').update({ stock: nuevoStockSellado }).eq('id', idSellado);
-      if (err1) return alert('Error al actualizar stock sellado: ' + err1.message);
-
-      const mlInicial = parseInt(perfumeSelladoObj.tamano) || 100;
-      const { error: errOpen } = await client.from('productos').insert([{
+        const mlInicial = parseInt(perfumeSelladoObj.tamano) || 100;
+        const { error: errOpen } = await client.from('productos').insert([{
           nombre: perfumeSelladoObj.nombre,
           tipo: 'Perfume para Decant',
           tamano: perfumeSelladoObj.tamano || '100ml',
@@ -1061,21 +1070,24 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
           imagen_url: perfumeSelladoObj.imagen_url,
           audio_url: perfumeSelladoObj.audio_url || null
         }]);
-      if (errOpen) {
-        await client.from('productos').update({ stock: perfumeSelladoObj.stock }).eq('id', idSellado).eq('stock', nuevoStockSellado);
-        return alert('No se pudo registrar el frasco abierto: ' + errOpen.message + '. Ejecuta primero la migración SQL indicada.');
-      }
+        if (errOpen) {
+          await client.from('productos').update({ stock: stockAnterior }).eq('id', idSellado).eq('stock', nuevoStockSellado);
+          return alert('No se pudo registrar el frasco abierto: ' + errOpen.message + '. Ejecuta primero la migración SQL indicada.');
+        }
 
-      const errorApertura = await registrarMovimientoInventario({
+        const errorApertura = await registrarMovimientoInventario({
         producto_id: String(idSellado), producto_nombre: perfumeSelladoObj.nombre,
         producto_tipo: 'Perfume Sellado', producto_tamano: perfumeSelladoObj.tamano || '100ml',
         tipo_movimiento: 'apertura', cantidad: 1,
         ubicacion_origen: perfumeSelladoObj.ubicacion_stock || 'Tienda Local', ubicacion_destino: ubicacion
-      });
+        });
 
-      alert(`¡"${perfumeSelladoObj.nombre}" se abrió correctamente! Quedan ${nuevoStockSellado} sellados.`);
-      if (errorApertura) alert('La apertura se realizó, pero no quedó en el historial del cierre. Ejecuta database/cierres-inventario.sql.');
-      cargarTodo();
+        alert(`¡"${perfumeSelladoObj.nombre}" se abrió correctamente! Quedan ${nuevoStockSellado} sellados.`);
+        if (errorApertura) alert('La apertura se realizó, pero no quedó en el historial del cierre. Ejecuta database/cierres-inventario.sql.');
+        cargarTodo();
+      } finally {
+        aperturasEnProceso.delete(llaveApertura);
+      }
     }
 
     async function editarProducto(id) {
