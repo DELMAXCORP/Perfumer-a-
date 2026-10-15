@@ -44,6 +44,7 @@
       <nav class="nav-tabs" aria-label="Secciones principales">
         <button type="button" data-tab="venta" aria-current="page" onclick="mostrarTab('venta')">🛒 Vender</button>
         <button type="button" data-tab="stock" onclick="mostrarTab('stock')">📦 Inventario</button>
+        <button type="button" data-tab="cierre" onclick="mostrarTab('cierre')">🧾 Cierre de inventario</button>
         <button type="button" data-tab="historial" onclick="mostrarTab('historial')">📊 Historial y Reportes</button>
         <button type="button" data-tab="asistencia" onclick="mostrarTab('asistencia')">⏱️ Asistencia</button>
       </nav>
@@ -70,6 +71,7 @@
               <select id="vtaCanal">
                 <option value="Alpha Móvil" selected>Alpha Móvil</option>
                 <option value="Tienda Local">Tienda Local</option>
+                <option value="Barbería">Barbería</option>
               </select>
             </div>
           </div>
@@ -205,6 +207,7 @@
               <select id="stkUbicacion">
                 <option value="Tienda Local">Tienda Local</option>
                 <option value="Alpha Móvil">Alpha Móvil</option>
+                <option value="Barbería">Barbería</option>
               </select>
             </div>
 
@@ -342,6 +345,16 @@
         <div id="listaVentas">Cargando historial...</div>
       </div>
 
+      <!-- TAB CIERRE DE INVENTARIO -->
+      <div id="tab-cierre" class="card hidden">
+        <h3 style="margin-top:0;">🧾 Cierre diario por ubicación</h3>
+        <p style="color:var(--muted);">Registra y edita las cantidades al final del día. Cada ubicación tiene su cierre independiente.</p>
+        <div class="report-filters"><div><label for="fechaCierreInventario">Día del cierre</label><input type="date" id="fechaCierreInventario" onchange="cargarCierreInventario()"></div></div>
+        <small id="estadoCierreInventario" style="display:block;margin-top:8px;color:var(--muted);"></small>
+        <div id="cierresInventarioPorUbicacion" style="display:grid;gap:12px;margin-top:12px;"></div>
+        <div id="eventosInventarioCierre" style="margin-top:14px;"></div>
+      </div>
+
       <!-- TAB ASISTENCIA -->
       <div id="tab-asistencia" class="card hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
@@ -383,7 +396,13 @@
             <span class="traslado-opcion-icono">🚐</span><span class="traslado-opcion-texto">Alpha Móvil</span>
             <strong id="trasladoStockMovil">0</strong><small>disponibles</small>
           </label>
+          <label class="traslado-opcion" for="trasladoOrigenBarberia">
+            <input type="radio" name="trasladoOrigen" id="trasladoOrigenBarberia" value="Barbería" onchange="actualizarFormularioTraslado()">
+            <span class="traslado-opcion-icono">💈</span><span class="traslado-opcion-texto">Barbería</span>
+            <strong id="trasladoStockBarberia">0</strong><small>disponibles</small>
+          </label>
         </div>
+        <div class="form-group"><label for="trasladoDestinoSelect">Ubicación de destino</label><select id="trasladoDestinoSelect" onchange="actualizarFormularioTraslado()"><option value="Alpha Móvil">Alpha Móvil</option><option value="Tienda Local">Tienda Local</option><option value="Barbería">Barbería</option></select></div>
         <div class="traslado-resumen"><span>Destino</span><strong id="trasladoDestino">Selecciona un origen</strong></div>
         <div class="form-group traslado-cantidad">
           <label for="trasladoCantidad">¿Cuántas unidades mover?</label>

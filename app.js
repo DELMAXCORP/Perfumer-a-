@@ -23,6 +23,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     const ADMIN_EMAILS = ['diego@alpha.com', 'luis@alpha.com', 'mau@alpha.com'];
 
     let usuarioActual = null;
+    let cierresInventarioCache = [];
     let listaProductos = [];
     let gruposAbiertosInventario = [];
     let carritoVenta = [];
@@ -187,6 +188,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
 
     const IMG_DEFAULT = 'https://static.vecteezy.com/system/resources/thumbnails/067/553/667/small/minimalist-graphic-illustration-of-a-bottle-useful-for-beauty-wellness-or-container-themes-simplicity-and-clean-design-enhance-visual-impact-vector.jpg';
+    const UBICACIONES_INVENTARIO = ['Tienda Local', 'Alpha Móvil', 'Barbería'];
 
     function esAdmin() {
       return usuarioActual && ADMIN_EMAILS.map(e => e.toLowerCase()).includes(usuarioActual.email.toLowerCase());
@@ -264,7 +266,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
 
     function mostrarTab(tab) {
-      const secciones = ['venta', 'stock', 'historial', 'asistencia'];
+      const secciones = ['venta', 'stock', 'cierre', 'historial', 'asistencia'];
       if (!secciones.includes(tab)) return;
       secciones.forEach(t => {
         document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
@@ -275,6 +277,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         }
       });
       if (tab === 'asistencia') cargarEstadoAsistencia();
+      if (tab === 'cierre') cargarCierreInventario();
     }
    
 
@@ -291,7 +294,104 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       actualizarOpcionesVenta();
       renderizarCarrito();
       cargarHistorial();
+      cargarCierreInventario();
       cargarEstadoAsistencia();
+    }
+
+    function fechaLocalISO(fecha = new Date()) {
+      return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+    }
+
+    async function cargarCierreInventario() {
+      const campoFecha = document.getElementById('fechaCierreInventario');
+      if (!campoFecha || !usuarioActual) return;
+      if (!campoFecha.value) campoFecha.value = fechaLocalISO();
+      const { data, error } = await client.from('cierres_inventario_ubicaciones').select('*').eq('fecha', campoFecha.value);
+      if (error) {
+        document.getElementById('estadoCierreInventario').innerText = 'Ejecuta database/cierres-inventario.sql para activar el cierre diario.';
+        return;
+      }
+      cierresInventarioCache = data || [];
+      document.getElementById('estadoCierreInventario').innerText = cierresInventarioCache.length ? `${cierresInventarioCache.length} de ${UBICACIONES_INVENTARIO.length} ubicaciones tienen cierre guardado.` : 'Aún no hay cierres guardados para este día.';
+      await renderizarDetalleCierreInventario(campoFecha.value, cierresInventarioCache);
+    }
+
+    async function renderizarDetalleCierreInventario(fecha, cierres = []) {
+      const inicio = new Date(`${fecha}T00:00:00`);
+      const fin = new Date(inicio.getTime() + 24 * 60 * 60 * 1000 - 1);
+      const desde = inicio.toISOString();
+      const hasta = fin.toISOString();
+      const [respuestaProductos, respuestaVentas, respuestaMovimientos] = await Promise.all([
+        client.from('productos').select('id,nombre,tipo,tamano,stock,ubicacion_stock,imagen_url').eq('tipo', 'Perfume Sellado').order('nombre'),
+        client.from('ventas').select('fecha,ubicacion_venta,detalles').gte('fecha', desde).lte('fecha', hasta),
+        client.from('inventario_movimientos').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha')
+      ]);
+      const contStock = document.getElementById('cierresInventarioPorUbicacion');
+      const contEventos = document.getElementById('eventosInventarioCierre');
+      const eventos = [];
+      const movimientosPorPerfume = new Map();
+      const agregarMovimientoAlCierre = (mov, etiqueta, texto) => {
+        const clave = `${normalizarTexto(mov.producto_nombre).trim()}|${normalizarTexto(mov.producto_tamano || '').trim()}`;
+        const hora = new Date(mov.fecha).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+        const detalle = `${etiqueta} · ${hora} · ${texto}`;
+        const lista = movimientosPorPerfume.get(clave) || [];
+        lista.push(detalle);
+        movimientosPorPerfume.set(clave, lista);
+        eventos.push({ hora, texto: `${mov.producto_nombre}: ${detalle}` });
+      };
+      if (!respuestaMovimientos.error) (respuestaMovimientos.data || []).forEach(mov => {
+        if (mov.tipo_movimiento === 'traslado' && mov.producto_tipo === 'Perfume Sellado') agregarMovimientoAlCierre(mov, 'Se movió', `${mov.ubicacion_origen || '?'} → ${mov.ubicacion_destino || '?'}`);
+        if (mov.tipo_movimiento === 'apertura') agregarMovimientoAlCierre(mov, 'Abierto para decants', `desde ${mov.ubicacion_origen || '?'} · abierto en ${mov.ubicacion_destino || '?'}`);
+      });
+      if (respuestaProductos.error) contStock.innerHTML = '<p>No se pudo cargar el stock sellado.</p>';
+      else {
+        const productos = respuestaProductos.data || [];
+        contStock.innerHTML = UBICACIONES_INVENTARIO.map((ubicacion, index) => {
+          const cierre = cierres.find(item => item.ubicacion === ubicacion);
+          const guardado = Array.isArray(cierre?.inventario) ? cierre.inventario : [];
+          const filasGuardadas = guardado.map(item => ({ ...productos.find(p => String(p.id) === String(item.id)), ...item }));
+          const idsGuardados = new Set(guardado.map(item => String(item.id)));
+          const filasActuales = productos.filter(p => (p.ubicacion_stock || 'Tienda Local') === ubicacion && !idsGuardados.has(String(p.id))).map(p => ({ ...p, cantidad: Number(p.stock) || 0 }));
+          const filas = filasGuardadas.concat(filasActuales)
+            .filter(p => Number(p.cantidad ?? p.stock) > 0)
+            .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', { sensitivity: 'base' }) || String(a.tamano || '').localeCompare(String(b.tamano || ''), 'es', { numeric: true }));
+          const itemsHtml = filas.length ? filas.map(p => {
+            const clave = `${normalizarTexto(p.nombre).trim()}|${normalizarTexto(p.tamano || '').trim()}`;
+            const actividad = movimientosPorPerfume.get(clave) || [];
+            const estado = actividad.length ? actividad.map(texto => `<small class="cierre-perfume-actividad">${escaparHTML(texto)}</small>`).join('') : '';
+            return `<div class="cierre-perfume-row"><img src="${escaparHTML(p.imagen_url || IMG_DEFAULT)}" alt="${escaparHTML(p.nombre || 'Perfume')}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'"><div class="cierre-perfume-nombre"><strong>${escaparHTML(p.nombre || 'Perfume')}</strong><small>${escaparHTML(p.tamano || '')}</small>${estado}</div><label>Cantidad<input type="number" min="0" step="1" inputmode="numeric" data-cierre-producto="${escaparHTML(String(p.id))}" value="${Number(p.cantidad ?? p.stock) || 0}" aria-label="Cantidad de ${escaparHTML(p.nombre || 'perfume')} en ${escaparHTML(ubicacion)}"></label></div>`;
+          }).join('') : '<p class="cierre-sin-stock">No hay perfumes sellados con stock en esta ubicación.</p>';
+          return `<section class="chart-container"><h4 style="margin-top:0;">${['🏬','🚐','💈'][index]} Cierre de ${escaparHTML(ubicacion)} ${cierre ? `<small>· Guardado ${new Date(cierre.actualizado_en).toLocaleString('es-PE')}</small>` : '<small>· Pendiente</small>'}</h4><div>${itemsHtml}</div><label for="cierreNota-${index}">Observaciones de ${escaparHTML(ubicacion)}</label><textarea id="cierreNota-${index}" rows="2" placeholder="Conteo y observaciones">${escaparHTML(cierre?.contenido || '')}</textarea><button type="button" class="btn-add" style="margin-top:8px;" onclick="guardarCierreInventarioUbicacion('${ubicacion}',${index})">💾 Guardar cierre de ${escaparHTML(ubicacion)}</button></section>`;
+        }).join('');
+      }
+      if (!respuestaVentas.error) (respuestaVentas.data || []).forEach(venta => {
+        (Array.isArray(venta.detalles) ? venta.detalles : []).filter(item => item.tipo === 'Perfume Sellado').forEach(item => {
+          const ubicacion = item.ubicacion_stock || (venta.ubicacion_venta || '').split(' (')[0] || 'Tienda Local';
+          eventos.push({ hora: new Date(venta.fecha).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }), texto: `Venta: ${Number(item.cantidad) || 1} × ${item.nombre} (${item.tamano || ''}) · ${ubicacion}` });
+        });
+      });
+      contEventos.innerHTML = `<h4>🧾 Actividad de perfumes sellados · ${fecha}</h4>${eventos.length ? `<ul>${eventos.map(ev => `<li><strong>${ev.hora}</strong> · ${escaparHTML(ev.texto)}</li>`).join('')}</ul>` : '<p>No hay ventas, traslados ni aperturas de perfumes sellados registrados para este día.</p>'}`;
+      if (respuestaVentas.error || respuestaMovimientos.error) contEventos.innerHTML += '<small>Algunos eventos no se pudieron consultar; verifica los permisos de lectura en Supabase.</small>';
+    }
+
+    async function guardarCierreInventarioUbicacion(ubicacion, indice) {
+      const fecha = document.getElementById('fechaCierreInventario').value;
+      const panel = document.getElementById('cierresInventarioPorUbicacion').children[indice];
+      const inventario = [...panel.querySelectorAll('[data-cierre-producto]')].map(input => ({
+        id: input.dataset.cierreProducto,
+        nombre: input.closest('.inventory-location-action')?.querySelector('strong')?.innerText || '',
+        tamano: input.closest('.inventory-location-action')?.querySelector('small')?.innerText || '',
+        imagen_url: input.closest('.inventory-location-action')?.querySelector('img')?.getAttribute('src') || '',
+        cantidad: Number(input.value)
+      }));
+      if (!fecha) return alert('Selecciona la fecha del cierre.');
+      if (inventario.some(item => !Number.isInteger(Number(item.cantidad)) || Number(item.cantidad) < 0)) return alert('Las cantidades deben ser números enteros iguales o mayores que cero.');
+      const contenido = document.getElementById(`cierreNota-${indice}`).value.trim();
+      const fila = { fecha, ubicacion, contenido, inventario, actualizado_por: usuarioActual.email, actualizado_en: new Date().toISOString() };
+      const { data, error } = await client.from('cierres_inventario_ubicaciones').upsert(fila, { onConflict: 'fecha,ubicacion' }).select('*').single();
+      if (error) return alert('No se pudo guardar el cierre. Ejecuta database/cierres-inventario.sql actualizado. ' + error.message);
+      cierresInventarioCache = [data, ...cierresInventarioCache.filter(item => !(item.fecha === fecha && item.ubicacion === ubicacion))];
+      document.getElementById('estadoCierreInventario').innerText = `Cierre de ${ubicacion} guardado por ${usuarioActual.email} el ${new Date(data.actualizado_en).toLocaleString('es-PE')}.`;
     }
 
     function toggleCamposStock() {
@@ -378,13 +478,11 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       if (!producto) return;
       const imagen = producto.imagen_url || IMG_DEFAULT;
       const abierto = Boolean(producto.esGrupoAbierto);
-      const local = esGrupo ? Number(producto.local) || 0 : producto.ubicacion_stock === 'Tienda Local' ? Number(producto.stock) || 0 : 0;
-      const movil = esGrupo ? Number(producto.movil) || 0 : producto.ubicacion_stock === 'Alpha Móvil' ? Number(producto.stock) || 0 : 0;
-      const unidades = esGrupo ? producto.filasLocal.concat(producto.filasMovil) : [producto];
+      const porUbicacion = esGrupo ? producto.porUbicacion : Object.fromEntries(UBICACIONES_INVENTARIO.map(u => [u, { stock: producto.ubicacion_stock === u ? Number(producto.stock) || 0 : 0, ml: 0, filas: producto.ubicacion_stock === u ? [producto] : [] }]));
+      const unidades = esGrupo ? UBICACIONES_INVENTARIO.flatMap(u => porUbicacion[u].filas) : [producto];
       let acciones = '';
 
       if (esAdmin()) {
-        if (esGrupo && producto.stock > 0) acciones += `<button type="button" class="btn-sec inventory-modal-wide-action" onclick="cerrarModalInventario();moverPerfumeAbierto(${referencia})">↔️ Cambiar ubicación</button>`;
         if (abierto) acciones += `<button type="button" class="btn-del" onclick="eliminarUnPerfumeAbierto(${referencia})">🗑️ Eliminar 1 perfume abierto</button>`;
 
         if (producto.tipo === 'Perfume Sellado') {
@@ -422,13 +520,15 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
           <div><p class="traslado-etiqueta">GESTIÓN DE INVENTARIO</p><h3 id="detalleInventarioTitulo">${producto.nombre}</h3><p>${abierto ? 'Perfume abierto para decants' : producto.tipo || ''} · ${producto.tamano || ''}</p></div>
         </div>
         <div class="inventory-modal-counts">
-          <div><span>🏬 Tienda Local</span><strong>${local}</strong></div>
-          <div><span>🚐 Alpha Móvil</span><strong>${movil}</strong></div>
+          ${UBICACIONES_INVENTARIO.map(u => `<div><span>${u}</span><strong>${porUbicacion[u].stock}</strong></div>`).join('')}
           <div><span>Total</span><strong>${Number(producto.stock) || 0}</strong></div>
         </div>
         ${producto.tipo === 'Perfume Sellado' ? `<div class="sellado-precios"><strong>Perfume: S/ ${Number(producto.precio_sugerido || 0).toFixed(2)}</strong><span>Decants 3 ml: S/ ${Number(producto.precio_decant_3ml || 0).toFixed(2)} · 5 ml: S/ ${Number(producto.precio_decant_5ml || 0).toFixed(2)}</span><span>10 ml: S/ ${Number(producto.precio_decant_10ml || 0).toFixed(2)} · 30 ml: S/ ${Number(producto.precio_decant_30ml || 0).toFixed(2)}</span></div>` : ''}
-        ${abierto ? `<p class="inventory-remaining">Contenido restante: ${Number(producto.mlLocal || 0).toFixed(1)} ml local · ${Number(producto.mlMovil || 0).toFixed(1)} ml Alpha Móvil</p>` : ''}
-        ${esAdmin() ? acciones : '<p class="inventory-readonly">Consulta el stock disponible por ubicación.</p>'}
+        ${abierto ? `<p class="inventory-remaining">Contenido restante: ${UBICACIONES_INVENTARIO.map(u => `${u}: ${porUbicacion[u].ml.toFixed(1)} ml`).join(' · ')}</p>` : ''}
+        ${esGrupo && producto.stock > 0 ? `<button type="button" class="btn-sec inventory-modal-wide-action" onclick="cerrarModalInventario();moverPerfumeAbierto(${referencia})">↔️ Cambiar ubicación</button>` : ''}
+        ${producto.tipo === 'Perfume Sellado' ? unidades.filter(fila => Number(fila.stock) > 0).map(fila => `<button type="button" class="btn-open" onclick="abrirPerfumeSellado(${fila.id})">🍾 Abrir 1 para decant · ${fila.ubicacion_stock || 'Tienda Local'}</button>`).join('') : ''}
+        ${esGrupo ? `<div class="inventory-location-actions">${UBICACIONES_INVENTARIO.map(u => `<section class="inventory-location-action"><h4>${u} · ${porUbicacion[u].stock} frascos</h4>${producto.esGrupoAbierto ? `<span>${porUbicacion[u].ml.toFixed(1)} ml restantes</span>` : ''}</section>`).join('')}</div>` : ''}
+        ${esAdmin() ? acciones : '<p class="inventory-readonly">Las acciones administrativas están disponibles para usuarios registrados según sus permisos.</p>'}
       `;
       document.getElementById('modalDetalleInventario').classList.remove('hidden');
     }
@@ -454,23 +554,18 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
             precio_decant_5ml: producto.precio_decant_5ml,
             precio_decant_10ml: producto.precio_decant_10ml,
             precio_decant_30ml: producto.precio_decant_30ml,
-            local: 0,
-            movil: 0,
-            mlLocal: 0,
-            mlMovil: 0,
-            filasLocal: [],
-            filasMovil: [],
+            porUbicacion: Object.fromEntries(UBICACIONES_INVENTARIO.map(ubicacion => [ubicacion, { stock: 0, ml: 0, filas: [] }])),
             stock: 0
           };
           gruposAbiertos.set(clave, grupo);
           resultado.push(grupo);
         }
-      const ubicacion = producto.ubicacion_stock === 'Alpha Móvil' ? 'movil' : 'local';
+        const ubicacion = UBICACIONES_INVENTARIO.includes(producto.ubicacion_stock) ? producto.ubicacion_stock : 'Tienda Local';
         const cantidadBotellas = Math.max(0, Number(producto.stock) || 0);
         const ml = Number(producto.ml_restantes ?? (cantidadBotellas * (parseInt(producto.tamano) || 100)));
-        grupo[ubicacion] += cantidadBotellas;
-        grupo[ubicacion === 'local' ? 'mlLocal' : 'mlMovil'] += Math.max(0, ml);
-        grupo[ubicacion === 'local' ? 'filasLocal' : 'filasMovil'].push(producto);
+        grupo.porUbicacion[ubicacion].stock += cantidadBotellas;
+        grupo.porUbicacion[ubicacion].ml += Math.max(0, ml);
+        grupo.porUbicacion[ubicacion].filas.push(producto);
         grupo.stock += cantidadBotellas;
         return resultado;
       }, []);
@@ -517,7 +612,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
               <span class="inventory-card-info">
                 <strong class="inventory-card-name">${p.nombre}</strong>
                 <span class="inventory-card-type">${p.esGrupoAbierto ? `Abierto · ${p.tamano}` : `Sellado · ${p.tamano}`}</span>
-                <span class="inventory-card-locations"><span>🏬 Local <b>${p.local}</b></span><span>🚐 Alpha Móvil <b>${p.movil}</b></span></span>
+                <span class="inventory-card-locations">${UBICACIONES_INVENTARIO.map(u => `<span>${u} <b>${p.porUbicacion[u].stock}</b></span>`).join('')}</span>
                 <span class="inventory-card-total">Total: ${p.stock} ${p.stock === 1 ? 'perfume' : 'perfumes'} <span>· Ver gestión ›</span></span>
               </span>
             </button>
@@ -555,7 +650,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
             <span class="inventory-card-info">
               <strong class="inventory-card-name">${p.nombre}</strong>
               <span class="inventory-card-type">${labelTipo}</span>
-              <span class="inventory-card-locations"><span>🏬 Local <b>${p.ubicacion_stock === 'Tienda Local' ? p.stock : 0}</b></span><span>🚐 Alpha Móvil <b>${p.ubicacion_stock === 'Alpha Móvil' ? p.stock : 0}</b></span></span>
+              <span class="inventory-card-locations">${UBICACIONES_INVENTARIO.map(u => `<span>${u} <b>${p.ubicacion_stock === u ? p.stock : 0}</b></span>`).join('')}</span>
               <span class="inventory-card-total">Total: ${p.stock} ${p.stock === 1 ? 'unidad' : 'unidades'} <span>· Ver gestión ›</span></span>
             </span>
           </button>
@@ -566,16 +661,17 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     let grupoTrasladoActual = null;
 
     function moverPerfumeAbierto(grupoIdx) {
-      if (!esAdmin()) return alert('Acceso denegado: Solo los administradores pueden cambiar la ubicación del inventario.');
       const grupo = gruposAbiertosInventario[grupoIdx];
       if (!grupo) return alert('No se encontró el perfume abierto. Actualiza el inventario e inténtalo de nuevo.');
       grupoTrasladoActual = grupoIdx;
       document.getElementById('trasladoTitulo').innerText = grupo.esGrupoAbierto ? 'Mover perfume abierto' : 'Mover perfume sellado';
       document.getElementById('trasladoNombre').innerText = `${grupo.nombre} · ${grupo.tamano}`;
-      document.getElementById('trasladoStockLocal').innerText = grupo.local;
-      document.getElementById('trasladoStockMovil').innerText = grupo.movil;
-      document.getElementById('trasladoOrigenLocal').checked = grupo.local > 0;
-      document.getElementById('trasladoOrigenMovil').checked = grupo.local <= 0 && grupo.movil > 0;
+      UBICACIONES_INVENTARIO.forEach((u, i) => {
+        document.getElementById(`trasladoStock${['Local','Movil','Barberia'][i]}`).innerText = grupo.porUbicacion[u].stock;
+        document.getElementById(`trasladoOrigen${['Local','Movil','Barberia'][i]}`).checked = i === 0 ? grupo.porUbicacion[u].stock > 0 : false;
+      });
+      if (!grupo.porUbicacion['Tienda Local'].stock) document.getElementById('trasladoOrigenMovil').checked = grupo.porUbicacion['Alpha Móvil'].stock > 0;
+      if (!grupo.porUbicacion['Tienda Local'].stock && !grupo.porUbicacion['Alpha Móvil'].stock) document.getElementById('trasladoOrigenBarberia').checked = true;
       document.getElementById('trasladoCantidad').value = 1;
       const botonTraslado = document.getElementById('btnConfirmarTraslado');
       botonTraslado.disabled = false;
@@ -593,8 +689,11 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     function actualizarFormularioTraslado() {
       const grupo = gruposAbiertosInventario[grupoTrasladoActual];
       const origen = document.querySelector('input[name="trasladoOrigen"]:checked')?.value;
-      const destino = origen === 'Tienda Local' ? 'Alpha Móvil' : origen === 'Alpha Móvil' ? 'Tienda Local' : null;
-      const filas = !grupo || !origen ? [] : (origen === 'Tienda Local' ? grupo.filasLocal : grupo.filasMovil);
+      const destinoSelect = document.getElementById('trasladoDestinoSelect');
+      if (destinoSelect) [...destinoSelect.options].forEach(option => { option.disabled = option.value === origen; });
+      if (destinoSelect?.value === origen) destinoSelect.value = UBICACIONES_INVENTARIO.find(u => u !== origen);
+      const destino = destinoSelect?.value;
+      const filas = !grupo || !origen ? [] : (grupo.porUbicacion[origen]?.filas || []);
       const disponibles = filas.reduce((total, fila) => total + Math.max(0, Number(fila.stock) || 0), 0);
       const cantidad = document.getElementById('trasladoCantidad');
       document.getElementById('trasladoDestino').innerText = destino || 'Selecciona un origen';
@@ -607,20 +706,20 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     function validarCantidadTraslado() {
       const grupo = gruposAbiertosInventario[grupoTrasladoActual];
       const origen = document.querySelector('input[name="trasladoOrigen"]:checked')?.value;
-      const filas = !grupo || !origen ? [] : (origen === 'Tienda Local' ? grupo.filasLocal : grupo.filasMovil);
+      const filas = !grupo || !origen ? [] : (grupo.porUbicacion[origen]?.filas || []);
       const disponibles = filas.reduce((total, fila) => total + Math.max(0, Number(fila.stock) || 0), 0);
       const cantidad = Number(document.getElementById('trasladoCantidad').value);
       document.getElementById('btnConfirmarTraslado').disabled = !origen || !Number.isInteger(cantidad) || cantidad < 1 || cantidad > disponibles;
     }
 
     async function confirmarTrasladoPerfume() {
-      if (!esAdmin()) return alert('Acceso denegado: Solo los administradores pueden cambiar la ubicación del inventario.');
       const grupo = gruposAbiertosInventario[grupoTrasladoActual];
       if (!grupo) return cerrarModalTrasladoStock();
       const origen = document.querySelector('input[name="trasladoOrigen"]:checked')?.value;
       if (!origen) return;
-      const destino = origen === 'Tienda Local' ? 'Alpha Móvil' : 'Tienda Local';
-      const filasOrigen = origen === 'Tienda Local' ? grupo.filasLocal : grupo.filasMovil;
+      const destino = document.getElementById('trasladoDestinoSelect').value;
+      if (destino === origen) return alert('Elige una ubicación de destino diferente al origen.');
+      const filasOrigen = grupo.porUbicacion[origen]?.filas || [];
       const disponibles = filasOrigen.reduce((total, fila) => total + Math.max(0, Number(fila.stock) || 0), 0);
       const cantidad = Number(document.getElementById('trasladoCantidad').value);
       if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > disponibles) return validarCantidadTraslado();
@@ -728,12 +827,13 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       const grupo = gruposAbiertosInventario[grupoIdx];
       if (!grupo) return alert('No se encontró el perfume abierto. Actualiza el inventario e inténtalo de nuevo.');
 
-      const origenElegido = prompt(`¿De dónde deseas eliminar 1 frasco abierto de "${grupo.nombre}"?\n\n1. Tienda Local (${grupo.local})\n2. Alpha Móvil (${grupo.movil})`, grupo.local > 0 ? '1' : '2');
+      const disponibles = UBICACIONES_INVENTARIO.filter(u => grupo.porUbicacion[u].stock > 0);
+      const origenElegido = prompt(`¿De dónde deseas eliminar 1 frasco abierto de "${grupo.nombre}"?\n\n${disponibles.map((u, i) => `${i + 1}. ${u} (${grupo.porUbicacion[u].stock})`).join('\n')}`, '1');
       if (origenElegido === null) return;
-      const origen = origenElegido.trim() === '1' ? 'Tienda Local' : origenElegido.trim() === '2' ? 'Alpha Móvil' : null;
-      if (!origen) return alert('Selecciona 1 para Tienda Local o 2 para Alpha Móvil.');
+      const origen = disponibles[Number(origenElegido.trim()) - 1];
+      if (!origen) return alert('Selecciona una ubicación válida de la lista.');
 
-      const filasOrigen = (origen === 'Tienda Local' ? grupo.filasLocal : grupo.filasMovil)
+      const filasOrigen = grupo.porUbicacion[origen].filas
         .filter(fila => Number(fila.stock) > 0);
       const fila = filasOrigen[0];
       if (!fila) return alert(`No hay perfumes abiertos disponibles en ${origen}.`);
@@ -932,15 +1032,13 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
 
     async function abrirPerfumeSellado(idSellado) {
-      if (!esAdmin()) return alert('Acceso denegado: Solo los administradores pueden modificar el inventario.');
-
       const perfumeSelladoObj = listaProductos.find(p => p.id === idSellado);
       if (!perfumeSelladoObj || perfumeSelladoObj.stock < 1) return alert('No hay stock disponible para abrir.');
 
-      const ubicacionElegida = prompt(`¿Dónde estará el frasco abierto de "${perfumeSelladoObj.nombre}"?\n\n1. Tienda Local\n2. Alpha Móvil`, '1');
+      const ubicacionElegida = prompt(`¿Dónde estará el frasco abierto de "${perfumeSelladoObj.nombre}"?\n\n1. Tienda Local\n2. Alpha Móvil\n3. Barbería`, '1');
       if (ubicacionElegida === null) return;
-      const ubicacion = ubicacionElegida.trim() === '1' ? 'Tienda Local' : ubicacionElegida.trim() === '2' ? 'Alpha Móvil' : null;
-      if (!ubicacion) return alert('Selecciona 1 para Tienda Local o 2 para Alpha Móvil.');
+      const ubicacion = ubicacionElegida.trim() === '1' ? 'Tienda Local' : ubicacionElegida.trim() === '2' ? 'Alpha Móvil' : ubicacionElegida.trim() === '3' ? 'Barbería' : null;
+      if (!ubicacion) return alert('Selecciona 1, 2 o 3 para elegir una ubicación válida.');
 
       const nuevoStockSellado = perfumeSelladoObj.stock - 1;
       const { error: err1 } = await client.from('productos').update({ stock: nuevoStockSellado }).eq('id', idSellado);
@@ -968,7 +1066,15 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         return alert('No se pudo registrar el frasco abierto: ' + errOpen.message + '. Ejecuta primero la migración SQL indicada.');
       }
 
+      const errorApertura = await registrarMovimientoInventario({
+        producto_id: String(idSellado), producto_nombre: perfumeSelladoObj.nombre,
+        producto_tipo: 'Perfume Sellado', producto_tamano: perfumeSelladoObj.tamano || '100ml',
+        tipo_movimiento: 'apertura', cantidad: 1,
+        ubicacion_origen: perfumeSelladoObj.ubicacion_stock || 'Tienda Local', ubicacion_destino: ubicacion
+      });
+
       alert(`¡"${perfumeSelladoObj.nombre}" se abrió correctamente! Quedan ${nuevoStockSellado} sellados.`);
+      if (errorApertura) alert('La apertura se realizó, pero no quedó en el historial del cierre. Ejecuta database/cierres-inventario.sql.');
       cargarTodo();
     }
 
@@ -1320,7 +1426,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         carritoVenta = Array.isArray(borrador.carritoVenta) ? borrador.carritoVenta : [];
         comprobanteBase64 = borrador.comprobanteBase64 || null;
         document.getElementById('vtaNotas').value = borrador.vtaNotas || '';
-        if (borrador.vtaCanal && ['Alpha Móvil', 'Tienda Local'].includes(borrador.vtaCanal)) document.getElementById('vtaCanal').value = borrador.vtaCanal;
+        if (borrador.vtaCanal && UBICACIONES_INVENTARIO.includes(borrador.vtaCanal)) document.getElementById('vtaCanal').value = borrador.vtaCanal;
         if (borrador.vtaMetodoPago) document.getElementById('vtaMetodoPago').value = borrador.vtaMetodoPago;
         if (comprobanteBase64) {
           document.getElementById('imgComprobantePreview').src = comprobanteBase64;
@@ -2473,7 +2579,10 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         const fecha = f.getFullYear() + '-' + String(f.getMonth() + 1).padStart(2, '0') + '-' + String(f.getDate()).padStart(2, '0');
         return (!desde || fecha >= desde) && (!hasta || fecha <= hasta);
       });
-      if (!ventasParaExportar.length && !movimientosParaExportar.length) return alert('No hay ventas ni movimientos de inventario en el período seleccionado.');
+      const { data: cierres, error: errorCierres } = await client.from('cierres_inventario_ubicaciones').select('*').order('fecha', { ascending: false });
+      if (errorCierres) return alert('No se pudieron cargar los cierres de inventario. Ejecuta database/cierres-inventario.sql. ' + errorCierres.message);
+      const cierresParaExportar = (cierres || []).filter(cierre => (!desde || cierre.fecha >= desde) && (!hasta || cierre.fecha <= hasta));
+      if (!ventasParaExportar.length && !movimientosParaExportar.length && !cierresParaExportar.length) return alert('No hay ventas, movimientos ni cierres de inventario en el período seleccionado.');
 
       const datosExcel = [
         ["ID", "Fecha y Hora", "Productos Vendidos", "Venta Total (S/)", "Margen de Contribución (S/)", "Vendedor", "Canal / Pago", "Notas / Observaciones", "Tiene Comprobante"]
@@ -2536,7 +2645,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         'Ubicación origen', 'Ubicación destino', 'Costo unitario (S/)', 'Costo total (S/)', 'Registrado por'
       ]];
       movimientosParaExportar.forEach(movimiento => {
-        const etiquetas = { compra: 'Compra', alta_inicial: 'Alta inicial', traslado: 'Cambio de ubicación' };
+        const etiquetas = { compra: 'Compra', alta_inicial: 'Alta inicial', traslado: 'Cambio de ubicación', apertura: 'Apertura para decants' };
         datosInventario.push([
           new Date(movimiento.fecha).toLocaleString('es-PE'),
           etiquetas[movimiento.tipo_movimiento] || movimiento.tipo_movimiento,
@@ -2557,6 +2666,16 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         return { wch: Math.min(Math.max(largo + 2, 12), 38) };
       });
       XLSX.utils.book_append_sheet(wb, wsInventario, 'Inventario');
+
+      const datosCierres = [['Fecha', 'Ubicación', 'Perfume', 'Tamaño', 'Cantidad al cierre', 'Observaciones', 'Actualizado por', 'Última actualización']];
+      cierresParaExportar.forEach(cierre => {
+        const items = Array.isArray(cierre.inventario) ? cierre.inventario : [];
+        if (!items.length) datosCierres.push([cierre.fecha, cierre.ubicacion, '', '', 0, cierre.contenido || '', cierre.actualizado_por || '', cierre.actualizado_en ? new Date(cierre.actualizado_en).toLocaleString('es-PE') : '']);
+        items.forEach(item => datosCierres.push([cierre.fecha, cierre.ubicacion, item.nombre || '', item.tamano || '', Number(item.cantidad) || 0, cierre.contenido || '', cierre.actualizado_por || '', cierre.actualizado_en ? new Date(cierre.actualizado_en).toLocaleString('es-PE') : '']));
+      });
+      const wsCierres = XLSX.utils.aoa_to_sheet(datosCierres);
+      wsCierres['!cols'] = [{ wch: 14 }, { wch: 20 }, { wch: 38 }, { wch: 14 }, { wch: 18 }, { wch: 60 }, { wch: 30 }, { wch: 24 }];
+      XLSX.utils.book_append_sheet(wb, wsCierres, 'Cierres inventario');
 
       const fechaHoy = new Date().toISOString().slice(0, 10);
       XLSX.writeFile(wb, `Reporte_ALPHA_${fechaHoy}.xlsx`);
