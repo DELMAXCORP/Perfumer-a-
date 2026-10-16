@@ -22,6 +22,6 @@ select
   precio_decant_30ml
 from public.productos
 where (tipo = 'Perfume para Decant' and stock > 0)
-   or (tipo = 'Perfume Sellado' and stock > 0);
+   or tipo = 'Perfume Sellado';
 
 grant select on public.catalogo_publico to anon, authenticated;
