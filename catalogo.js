@@ -31,11 +31,11 @@
     const button = document.createElement('button');
     button.type = 'button';
     button.className = className;
-    button.setAttribute('aria-label', `Reproducir audio de ${product.nombre}`);
-    const esSellado = isSealed(product) || product._tieneSellado;
-    button.title = esSellado
-      ? 'Reproducir audio del perfume'
-      : (product.audio_url ? 'Reproducir audio y mostrar precios de decant' : 'Mostrar precios de decant');
+    const action = product.audio_url
+      ? 'Mostrar u ocultar precios de decant y reproducir audio'
+      : 'Mostrar u ocultar precios de decant';
+    button.setAttribute('aria-label', `${action} de ${product.nombre}`);
+    button.title = action;
     button.append(content);
     button.addEventListener('click', () => {
       playProductAudio(product);
@@ -67,15 +67,23 @@
       const key = norm(product.nombre).replace(/\s+/g, ' ').trim();
       const current = unique.get(key);
       if (!current) {
-        unique.set(key, { ...product, _tieneSellado: isSealed(product) });
+        unique.set(key, {
+          ...product,
+          _tieneSellado: isSealed(product),
+          agotado: isSealed(product) && product.agotado === true
+        });
         return;
       }
 
       const esSellado = isSealed(product);
+      // Una botella disponible en cualquier ubicación mantiene disponible el perfume.
+      const agotadoSellado = esSellado
+        ? product.agotado === true && (!current._tieneSellado || current.agotado === true)
+        : current.agotado === true;
       if (esSellado && (!current._tieneSellado || Number(product.precio_venta) > Number(current.precio_venta || 0))) {
         current.precio_venta = product.precio_venta;
-        current.agotado = product.agotado;
       }
+      current.agotado = agotadoSellado;
       current._tieneSellado = current._tieneSellado || esSellado;
 
       const tieneDecants = ['precio_decant_3ml', 'precio_decant_5ml', 'precio_decant_10ml', 'precio_decant_30ml']
@@ -153,7 +161,13 @@
       });
       decantPrices.prepend(decantHeading);
       info.append(name, price);
-      if (!esSellado) info.append(decantPrices);
+      if (esSellado && product.agotado) {
+        const availability = document.createElement('p');
+        availability.className = 'product-status-out';
+        availability.textContent = 'Perfume sellado agotado';
+        info.append(availability);
+      }
+      info.append(decantPrices);
       card.append(info);
       grid.append(card);
     });

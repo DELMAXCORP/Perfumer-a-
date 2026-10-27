@@ -423,6 +423,28 @@
       </div>
     </div>
 
+    <div id="modalImagenProducto" class="modal-overlay hidden" onclick="if(event.target === this) cerrarModalImagenProducto()">
+      <section class="modal-content inventory-image-modal" role="dialog" aria-modal="true" aria-labelledby="tituloImagenProducto">
+        <button type="button" id="cerrarImagenProducto" class="traslado-cerrar" aria-label="Cerrar" onclick="cerrarModalImagenProducto()">×</button>
+        <p class="traslado-etiqueta">IMAGEN DEL PERFUME</p>
+        <h3 id="tituloImagenProducto">Cambiar imagen</h3>
+        <p id="nombreImagenProducto"></p>
+        <img id="previewImagenProducto" class="inventory-image-preview" alt="Vista previa de la imagen del perfume">
+        <form id="formImagenProducto" onsubmit="event.preventDefault();guardarImagenProducto()">
+          <div class="form-group">
+            <label for="archivoImagenProducto">Seleccionar nueva imagen</label>
+            <input type="file" id="archivoImagenProducto" accept="image/jpeg,image/png,image/webp" onchange="previsualizarImagenProducto()" aria-describedby="ayudaImagenProducto estadoImagenProducto">
+            <small id="ayudaImagenProducto">JPG, PNG o WebP, hasta 5 MB. La imagen se aplicará al perfume en todas sus ubicaciones y en el catálogo público.</small>
+          </div>
+          <p id="estadoImagenProducto" role="status" aria-live="polite"></p>
+          <div class="traslado-acciones">
+            <button type="button" id="cancelarImagenProducto" class="btn-sec" onclick="cerrarModalImagenProducto()">Cancelar</button>
+            <button type="submit" id="btnGuardarImagenProducto" disabled>Guardar imagen</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
     <!-- MODAL COMPROBANTE -->
     <div id="modalComprobante" class="modal-overlay hidden">
       <div class="modal-content">

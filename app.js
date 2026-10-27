@@ -19,6 +19,8 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     const COMPROBANTES_BUCKET = 'comprobantes';
     const BORRADORES_DB = 'alpha-perfumes-local';
     const BORRADORES_STORE = 'borradores_venta';
+    const IMAGENES_CATALOGO_BUCKET = 'catalogo-imagenes';
+    let edicionImagenProducto = null;
 
     const ADMIN_EMAILS = ['diego@alpha.com', 'luis@alpha.com', 'mau@alpha.com'];
 
@@ -520,6 +522,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
           <img src="${imagen}" alt="${producto.nombre}" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'">
           <div><p class="traslado-etiqueta">GESTIÓN DE INVENTARIO</p><h3 id="detalleInventarioTitulo">${producto.nombre}</h3><p>${abierto ? 'Perfume abierto para decants' : producto.tipo || ''} · ${producto.tamano || ''}</p></div>
         </div>
+        ${esAdmin() && producto.tipo !== 'Decant Vacío' && unidades.length ? `<button type="button" class="btn-sec" onclick="abrirModalImagenProducto(${unidades[0].id})">🖼️ Cambiar imagen</button>` : ''}
         <div class="inventory-modal-counts">
           ${UBICACIONES_INVENTARIO.map(u => `<div><span>${u}</span><strong>${porUbicacion[u].stock}</strong></div>`).join('')}
           <div><span>Total</span><strong>${Number(producto.stock) || 0}</strong></div>
@@ -1130,6 +1133,139 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       else {
         alert('¡Producto actualizado correctamente!');
         cargarTodo();
+      }
+    }
+
+    function abrirModalImagenProducto(id) {
+      if (!esAdmin()) return alert('Solo los administradores pueden cambiar imágenes.');
+      if (edicionImagenProducto?.guardando) return;
+      const producto = listaProductos.find(p => Number(p.id) === Number(id));
+      if (!producto) return;
+      cerrarModalImagenProducto();
+      const clave = normalizarTexto(producto.nombre).replace(/\s+/g, ' ').trim();
+      const ids = listaProductos.filter(p => ['Perfume Sellado', 'Perfume para Decant'].includes(p.tipo)
+        && normalizarTexto(p.nombre).replace(/\s+/g, ' ').trim() === clave).map(p => p.id);
+      if (!ids.length) return;
+      edicionImagenProducto = { producto, ids, archivo: null, previewUrl: null, guardando: false };
+      document.getElementById('formImagenProducto').reset();
+      document.getElementById('nombreImagenProducto').textContent = producto.nombre;
+      document.getElementById('previewImagenProducto').src = producto.imagen_url || IMG_DEFAULT;
+      document.getElementById('estadoImagenProducto').textContent = '';
+      document.getElementById('btnGuardarImagenProducto').disabled = true;
+      cerrarModalInventario();
+      document.getElementById('modalImagenProducto').classList.remove('hidden');
+      document.getElementById('archivoImagenProducto').focus();
+    }
+
+    function cerrarModalImagenProducto() {
+      if (edicionImagenProducto?.guardando) return;
+      const modal = document.getElementById('modalImagenProducto');
+      const estabaAbierto = !modal.classList.contains('hidden');
+      if (edicionImagenProducto?.previewUrl) URL.revokeObjectURL(edicionImagenProducto.previewUrl);
+      edicionImagenProducto = null;
+      modal.classList.add('hidden');
+      if (estabaAbierto) document.getElementById('inputBusqueda').focus();
+    }
+
+    document.getElementById('modalImagenProducto').addEventListener('keydown', event => {
+      if (event.key === 'Escape') cerrarModalImagenProducto();
+      if (event.key !== 'Tab') return;
+      const controles = Array.from(event.currentTarget.querySelectorAll('button:not(:disabled), input:not(:disabled)'));
+      const primero = controles[0];
+      const ultimo = controles[controles.length - 1];
+      if (event.shiftKey && document.activeElement === primero) {
+        event.preventDefault();
+        ultimo?.focus();
+      } else if (!event.shiftKey && document.activeElement === ultimo) {
+        event.preventDefault();
+        primero?.focus();
+      }
+    });
+
+    async function previsualizarImagenProducto() {
+      const edicion = edicionImagenProducto;
+      if (!edicion || edicion.guardando) return;
+      const archivo = document.getElementById('archivoImagenProducto').files[0];
+      const estado = document.getElementById('estadoImagenProducto');
+      const boton = document.getElementById('btnGuardarImagenProducto');
+      edicion.archivo = null;
+      boton.disabled = true;
+      estado.textContent = '';
+      if (edicion.previewUrl) URL.revokeObjectURL(edicion.previewUrl);
+      edicion.previewUrl = null;
+      document.getElementById('previewImagenProducto').src = edicion.producto.imagen_url || IMG_DEFAULT;
+      if (!archivo) return;
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(archivo.type)) {
+        estado.textContent = 'Selecciona una imagen JPG, PNG o WebP.';
+        return;
+      }
+      if (archivo.size > 5 * 1024 * 1024) {
+        estado.textContent = 'La imagen debe pesar como máximo 5 MB.';
+        return;
+      }
+      const previewUrl = URL.createObjectURL(archivo);
+      edicion.previewUrl = previewUrl;
+      const imagen = new Image();
+      imagen.src = previewUrl;
+      try {
+        await imagen.decode();
+        if (edicionImagenProducto !== edicion || edicion.previewUrl !== previewUrl) return;
+        edicion.archivo = archivo;
+        document.getElementById('previewImagenProducto').src = previewUrl;
+        boton.disabled = false;
+        estado.textContent = 'Vista previa lista. Pulsa Guardar imagen para publicarla.';
+      } catch (error) {
+        if (edicionImagenProducto === edicion && edicion.previewUrl === previewUrl) {
+          estado.textContent = 'No se pudo leer la imagen. Selecciona otro archivo.';
+          URL.revokeObjectURL(previewUrl);
+          edicion.previewUrl = null;
+        }
+      }
+    }
+
+    async function guardarImagenProducto() {
+      const edicion = edicionImagenProducto;
+      if (!esAdmin() || !edicion?.archivo || edicion.guardando) return;
+      edicion.guardando = true;
+      const controles = ['btnGuardarImagenProducto', 'cancelarImagenProducto', 'cerrarImagenProducto', 'archivoImagenProducto'];
+      controles.forEach(id => { document.getElementById(id).disabled = true; });
+      const estado = document.getElementById('estadoImagenProducto');
+      estado.textContent = 'Guardando imagen…';
+      const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[edicion.archivo.type];
+      const ruta = `${usuarioActual.id}/${crypto.randomUUID()}.${extension}`;
+      const storage = client.storage.from(IMAGENES_CATALOGO_BUCKET);
+      let imagenGuardada = false;
+      try {
+        const { error: errorSubida } = await storage.upload(ruta, edicion.archivo, {
+          contentType: edicion.archivo.type, cacheControl: '3600', upsert: false
+        });
+        if (errorSubida) throw new Error('No se pudo subir la imagen: ' + errorSubida.message);
+        const imagenUrl = storage.getPublicUrl(ruta).data.publicUrl;
+        const { data, error } = await client.from('productos').update({ imagen_url: imagenUrl }).in('id', edicion.ids).select('id');
+        if (error || !data?.length) {
+          const { error: errorLimpieza } = await storage.remove([ruta]);
+          if (errorLimpieza) console.warn('No se pudo retirar la imagen sin asociar:', errorLimpieza);
+          throw new Error('No se pudo asociar la imagen al perfume: ' + (error?.message || 'revisa tus permisos de edición.'));
+        }
+        imagenGuardada = true;
+        const idsActualizados = new Set(data.map(p => Number(p.id)));
+        listaProductos.forEach(p => { if (idsActualizados.has(Number(p.id))) p.imagen_url = imagenUrl; });
+        renderizarStock();
+        const perfumeSeleccionado = Number(document.getElementById('itemPerfume').value);
+        if (idsActualizados.has(perfumeSeleccionado)) document.getElementById('prevImg').src = imagenUrl;
+        if (data.length !== edicion.ids.length) {
+          throw new Error('La imagen se guardó, pero algunos registros no pudieron actualizarse. Revisa tus permisos y vuelve a intentarlo.');
+        }
+        edicion.guardando = false;
+        cerrarModalImagenProducto();
+        mostrarAviso('Imagen actualizada. El catálogo público mostrará el cambio en un máximo de 30 segundos.');
+      } catch (error) {
+        estado.textContent = error.message || 'No se pudo guardar la imagen. Vuelve a intentarlo.';
+        console.error('Error al cambiar la imagen del perfume:', error);
+      } finally {
+        edicion.guardando = false;
+        controles.forEach(id => { document.getElementById(id).disabled = false; });
+        if (imagenGuardada && edicionImagenProducto === edicion) renderizarStock();
       }
     }
 
