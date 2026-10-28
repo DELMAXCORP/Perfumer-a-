@@ -418,6 +418,18 @@
 .cierre-perfume-row label { margin:0; font-size:.72rem; }
 .cierre-perfume-row input { width:100%; min-height:42px; margin-top:4px; padding:8px; text-align:center; }
 .cierre-sin-stock { margin:8px 0; padding:12px; border:1px dashed var(--border); border-radius:9px; color:var(--muted); text-align:center; }
+.p15-panel { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding-bottom:12px; font-size:.8rem; }
+.p15-panel p { flex-basis:100%; margin:0; color:var(--muted); overflow-wrap:anywhere; }
+.p15-panel button, .p15-imprimir { width:auto; min-height:40px; margin:0; padding:8px 10px; font-size:.75rem; }
+#p15Estado { color:var(--muted); }
+#p15Estado[data-estado="Conectada"] { color:#a3e6af; }
+#p15Estado[data-estado="Conectando"] { color:var(--gold-light); }
+.p15-panel button:disabled, .p15-imprimir:disabled { opacity:.55; cursor:wait; }
+@media (max-width:600px) {
+  .cart-item { flex-wrap:wrap; }
+  .cart-item > div { min-width:0; max-width:100%; }
+  .cart-item > div:last-child { flex-wrap:wrap; justify-content:flex-end; margin-left:auto; }
+}
 @media (max-width:420px) {
   .cierre-perfume-row { grid-template-columns:48px minmax(0,1fr) 76px; gap:7px; padding:7px; }
   .cierre-perfume-row > img { width:46px; height:46px; }

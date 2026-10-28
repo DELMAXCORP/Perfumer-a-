@@ -122,6 +122,12 @@
 
         <div class="cart-box">
           <h4 style="margin:0 0 10px; color:var(--ivory); border-bottom:1px solid var(--border); padding-bottom:6px;">🛍️ Detalle de la Venta Actual</h4>
+          <div class="p15-panel">
+            <span>Marklife P15 · <strong id="p15Estado" role="status">Desconectada</strong></span>
+            <button type="button" id="p15Conectar" class="btn-sec">Conectar P15</button>
+            <p id="p15Mensaje" aria-live="polite">Etiquetas de 40 × 12 mm. Una etiqueta por pulsación.</p>
+            <p id="p15Resultado" aria-live="polite"></p>
+          </div>
           <div id="listaCarrito"><p class="empty-msg">El carrito está vacío. Agrega productos arriba.</p></div>
           <div class="cart-total" id="txtTotalVenta">Total a cobrar: S/ 0.00</div>
         </div>
@@ -508,6 +514,7 @@
     </div>
   </main>
 
+  <script src="marklife-p15.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1871,6 +1871,17 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       guardarBorradorVenta();
     }
 
+    function imprimirEtiquetaCarrito(indice) {
+      const item = carritoVenta[indice];
+      if (!item) return;
+      const producto = listaProductos.find(p => String(p.id) === String(item.producto_id));
+      // Solo se leen datos: imprimir no guarda ni modifica el carrito o el inventario.
+      const nombre = item.es_regalo
+        ? (producto?.nombre || item.nombre.replace(/^🎁 REGALO: Decant .+?ml \((.*)\)$/, '$1'))
+        : item.nombre;
+      void window.AlphaP15.imprimir({ nombre, tamano: item.tamano, ml_vendido: item.ml_vendido });
+    }
+
     function renderizarCarrito() {
       const cont = document.getElementById('listaCarrito');
       if (!carritoVenta.length) {
@@ -1893,6 +1904,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
               <div class="cart-item-controls"><div class="cart-quantity-controls"><button type="button" onclick="ajustarCantidadCarrito(${idx}, -1)" aria-label="Restar una unidad">−</button><span>${item.cantidad}</span><button type="button" onclick="ajustarCantidadCarrito(${idx}, 1)" aria-label="Sumar una unidad">+</button></div><strong style="color:${item.es_regalo ? '#a3e6af' : 'var(--gold-light)'};">S/ ${item.subtotal.toFixed(2)}</strong></div>
+              <button type="button" onclick="imprimirEtiquetaCarrito(${idx})" class="p15-imprimir" ${window.AlphaP15?.ocupada ? 'disabled' : ''}>Imprimir etiqueta</button>
               <button type="button" onclick="eliminarDelCarrito(${idx})" class="btn-del">❌</button>
             </div>
           </div>
