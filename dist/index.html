@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1c33">
+  <meta name="description" content="ALPHA Store: perfumes completos y decants en Ica, Perú.">
+  <title>ALPHA Store | Perfumes y decants en Ica</title>
+  <link rel="icon" type="image/jpeg" href="assets/alpha-logo.jpeg">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="supabaseClient.js"></script>
+  <script defer src="store-core.js"></script>
+  <script defer src="product-metadata.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#contenido">Ir al contenido</a>
+  <header class="site-header" id="inicio">
+    <div class="header-inner">
+      <a class="brand" href="#inicio" aria-label="ALPHA Store, ir al inicio">
+        <img src="assets/alpha-logo.jpeg" width="48" height="48" alt="">
+        <span><strong>ALPHA</strong><small>STORE</small></span>
+      </a>
+      <nav class="main-nav" aria-label="Navegación principal">
+        <a href="#coleccion">Colección</a><a href="#nosotros">Nosotros</a><a href="#contacto">Contacto</a>
+      </nav>
+      <button class="bag-button" id="open-bag" type="button" aria-haspopup="dialog">
+        <span aria-hidden="true">Bolsa</span><span class="bag-count" id="bag-count" aria-label="0 productos en la bolsa">0</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="contenido">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow">PERFUMERÍA EN ICA, PERÚ</p>
+        <h1 id="hero-title">Tu próxima fragancia, <em>en la presentación ideal.</em></h1>
+        <p class="hero-lead">Explora perfumes completos y decants, compara cantidades y prepara tu pedido con información clara.</p>
+        <div class="hero-actions"><a class="button button-primary" href="#coleccion">Explorar colección</a><a class="text-link" href="#como-elegir">¿Completo o decant?</a></div>
+        <p class="manual-note"><span aria-hidden="true">●</span> Los pedidos se coordinan manualmente por WhatsApp.</p>
+      </div>
+      <figure class="hero-showcase">
+        <img src="assets/hero-decants-pexels.jpg" width="1600" height="1064" alt="Cuatro atomizadores pequeños de perfume en un estuche, una presentación visual real de decants">
+        <figcaption><strong>Decants reales</strong><span>Atomizadores pequeños para explorar una fragancia en cantidades indicadas en ml.</span><a href="https://www.pexels.com/photo/perfume-samples-on-a-leather-case-7000326/" target="_blank" rel="noopener noreferrer">Foto: Stefanie Berlin / Pexels</a></figcaption>
+      </figure>
+    </section>
+
+    <aside class="gift-banner" aria-label="Beneficio de compra">
+      <div class="gift-icon" aria-hidden="true">✦</div>
+      <div><p class="eyebrow">BENEFICIO ALPHA</p><p>Recibe un <strong>decant de regalo</strong> por la compra de un perfume completo y sellado.</p><small>El tamaño y la fragancia del obsequio se confirman durante la atención.</small></div>
+    </aside>
+
+    <section class="catalog-section" id="coleccion" aria-labelledby="catalog-title">
+      <div class="section-heading">
+        <div><p class="eyebrow">COLECCIÓN</p><h2 id="catalog-title">Fragancias para explorar</h2></div>
+        <p>Precios y disponibilidad proceden del catálogo público actual de ALPHA.</p>
+      </div>
+      <form class="filters" id="filters" role="search">
+        <div class="search-field"><label for="search">Buscar por nombre o marca</label><div class="input-with-icon"><span aria-hidden="true">⌕</span><input id="search" name="search" type="search" placeholder="Ej. nombre de la fragancia" autocomplete="off"></div></div>
+        <div class="filter-field"><label for="category-filter">Categoría</label><select id="category-filter" name="category"><option value="all">Todas</option><option value="arabes">Perfumes árabes</option><option value="disenador">De diseñador</option><option value="decants">Decants</option><option value="sin-clasificar">Por clasificar</option></select></div>
+        <div class="filter-field"><label for="presentation-filter">Presentación</label><select id="presentation-filter" name="presentation"><option value="all">Todas</option><option value="completo">Perfume completo</option><option value="decant">Decant</option></select></div>
+        <fieldset class="price-filter"><legend>Precio (S/)</legend><label><span>Desde</span><input id="price-min" type="number" min="0" step="1" inputmode="decimal" placeholder="0"></label><label><span>Hasta</span><input id="price-max" type="number" min="0" step="1" inputmode="decimal" placeholder="Sin límite"></label></fieldset>
+        <button class="button button-quiet reset-filters" id="reset-filters" type="reset">Limpiar filtros</button>
+      </form>
+      <div class="catalog-status-row"><p id="result-count" aria-live="polite">Cargando colección…</p><p class="data-note">Las categorías no confirmadas aparecen como “Por clasificar”.</p></div>
+      <div class="product-grid" id="product-grid" aria-live="polite" aria-busy="true"><div class="loading-card" aria-hidden="true"></div><div class="loading-card" aria-hidden="true"></div><div class="loading-card" aria-hidden="true"></div></div>
+      <div class="empty-state" id="catalog-empty" hidden><span aria-hidden="true">◇</span><h3>No encontramos coincidencias</h3><p>Prueba con otro nombre o ajusta los filtros.</p><button class="button button-secondary" id="empty-reset" type="button">Ver toda la colección</button></div>
+      <div class="empty-state error-state" id="catalog-error" hidden><span aria-hidden="true">!</span><h3>No pudimos cargar la colección</h3><p>La conexión con el catálogo no está disponible en este momento. Inténtalo nuevamente.</p><button class="button button-secondary" id="retry-catalog" type="button">Reintentar</button></div>
+    </section>
+
+    <section class="choice-guide" id="como-elegir" aria-labelledby="guide-title">
+      <div class="guide-intro"><p class="eyebrow">ELIGE CON CLARIDAD</p><h2 id="guide-title">Dos formas de disfrutar una fragancia</h2><p>La presentación cambia la cantidad que recibes, no la identidad de la fragancia.</p></div>
+      <article><span class="guide-number">01</span><h3>Perfume completo</h3><p>El frasco completo y sellado, identificado con su cantidad disponible.</p></article>
+      <article><span class="guide-number">02</span><h3>Decant</h3><p>Una cantidad indicada en mililitros, presentada con una imagen propia de decant.</p></article>
+      <article><span class="guide-number">03</span><h3>Antes de pedir</h3><p>Revisa presentación, cantidad, precio y disponibilidad. La atención por WhatsApp confirma los datos finales.</p></article>
+    </section>
+
+    <section class="about-section" id="nosotros" aria-labelledby="about-title">
+      <div class="about-mark" aria-hidden="true"><img src="assets/alpha-logo.jpeg" width="240" height="240" alt=""></div>
+      <div class="about-copy"><p class="eyebrow">NOSOTROS</p><h2 id="about-title">ALPHA Perfumería</h2><p>Somos una tienda de perfumes completos y decants ubicada en Ica, Perú. Esta tienda digital permite consultar el catálogo y preparar un pedido antes de coordinarlo con el negocio.</p><p class="pending-copy">La historia de la marca y otros datos institucionales están pendientes de confirmación.</p></div>
+    </section>
+
+    <section class="contact-section" id="contacto" aria-labelledby="contact-title">
+      <div><p class="eyebrow">CONTACTO</p><h2 id="contact-title">Conversemos sobre tu pedido</h2><p>La atención y validación de pedidos es manual. Preparar o enviar un resumen no confirma disponibilidad, pago ni compra.</p></div>
+      <dl class="contact-list"><div><dt>Ubicación confirmada</dt><dd>Ica, Perú</dd></div><div><dt>WhatsApp oficial</dt><dd class="pending-value">Pendiente de confirmar</dd></div><div><dt>Dirección y horario</dt><dd class="pending-value">Pendientes de confirmar</dd></div><div><dt>Pago y entrega</dt><dd class="pending-value">Condiciones pendientes de confirmar</dd></div></dl>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a class="brand footer-brand" href="#inicio"><img src="assets/alpha-logo.jpeg" width="52" height="52" alt=""><span><strong>ALPHA</strong><small>PERFUMES Y DECANTS</small></span></a>
+    <p>Prototipo para evaluación de experiencia de usuario.</p><p>© <span id="year"></span> ALPHA Perfumería · Ica, Perú</p>
+  </footer>
+
+  <dialog class="product-dialog" id="product-dialog" aria-labelledby="product-dialog-title"><button class="dialog-close" id="close-product" type="button" aria-label="Cerrar ficha de producto">×</button><div id="product-detail"></div></dialog>
+  <dialog class="bag-dialog" id="bag-dialog" aria-labelledby="bag-title">
+    <div class="bag-header"><div><p class="eyebrow">TU SELECCIÓN</p><h2 id="bag-title">Bolsa</h2></div><button class="dialog-close" id="close-bag" type="button" aria-label="Cerrar bolsa">×</button></div>
+    <div class="bag-body" id="bag-items"></div>
+    <div class="bag-summary" id="bag-summary"><div><span>Subtotal</span><strong id="bag-subtotal">S/ 0.00</strong></div><div class="bag-total"><span>Total referencial</span><strong id="bag-total">S/ 0.00</strong></div><p>Los importes no incluyen condiciones de entrega. La disponibilidad y el total final se confirman por WhatsApp.</p><button class="button button-primary button-full" id="copy-order" type="button">Copiar resumen del pedido</button><button class="button button-whatsapp button-full" id="send-whatsapp" type="button" disabled>WhatsApp pendiente de confirmar</button><p class="bag-feedback" id="bag-feedback" role="status" aria-live="polite"></p></div>
+  </dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

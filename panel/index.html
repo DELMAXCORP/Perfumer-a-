@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ALPHA Perfumes y Decants</title>
+  
+  <link rel="icon" type="image/jpeg" href="assets/alpha-logo.jpeg">
+  <link rel="apple-touch-icon" href="assets/alpha-logo.jpeg">
+
+  <!-- SUPABASE, SHEETJS & CHART.JS -->
+  <!-- ========================================================= -->
+  <!-- CARGA DE SCRIPTS EN ORDEN ESTRICTO                        -->
+  <!-- ========================================================= -->
+
+  <!-- 1. SDK Oficial de Supabase v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section id="sec-login" class="card login-card">
+      <div class="brand"><img src="assets/alpha-logo.jpeg" alt="Alpha Perfumes y Decants"><h1 class="brand-name">VENTAS</h1><p class="brand-tagline">PLATAFORMA</p><div class="gold-rule"></div></div>
+      <p style="text-align:center; margin:22px 0 16px;">Iniciar sesión</p>
+      <a class="catalog-entry" href="catalogo.html">✨ Ver catálogo de perfumes</a>
+      <form id="formLogin">
+        <div class="form-group"><label>Correo electrónico</label><input type="email" id="loginEmail" placeholder="usuario@email.com" required></div>
+        <div class="form-group"><label>Contraseña</label><input type="password" id="loginPass" placeholder="••••••••" required></div>
+        <button type="submit">Ingresar</button>
+      </form>
+    </section>
+
+    <section id="sec-app" class="hidden">
+      <header class="header">
+        <div class="brand"><img src="assets/alpha-logo.jpeg" alt="Alpha"><h1 class="brand-name">ALPHA</h1><p class="brand-tagline">PERFUMES Y DECANTS</p><div class="gold-rule"></div></div>
+        <p id="userLogged" style="margin:12px 0 0; font-size:.8rem;"></p>
+        <button onclick="cerrarSesion()" class="btn-sec" style="padding:6px 10px;font-size:.72rem;width:auto;margin-top:7px;">Cerrar sesión</button>
+      </header>
+
+      <nav class="nav-tabs" aria-label="Secciones principales">
+        <button type="button" data-tab="venta" aria-current="page" onclick="mostrarTab('venta')">🛒 Vender</button>
+        <button type="button" data-tab="stock" onclick="mostrarTab('stock')">📦 Inventario</button>
+        <button type="button" data-tab="cierre" onclick="mostrarTab('cierre')">🧾 Cierre de inventario</button>
+        <button type="button" data-tab="historial" onclick="mostrarTab('historial')">📊 Historial y Reportes</button>
+        <button type="button" data-tab="asistencia" onclick="mostrarTab('asistencia')">⏱️ Asistencia</button>
+        <button type="button" data-tab="contactos" onclick="mostrarTab('contactos')">📱 Contactos Marketing</button>
+      </nav>
+
+      <!-- TAB VENTA -->
+      <div id="tab-venta" class="card">
+        <h3>🛒 Registrar Nueva Venta</h3>
+        
+        <div style="background: rgba(2,19,38,.4); padding:14px; border-radius:10px; border:1px solid rgba(246,240,231,.1);">
+          <h4 style="margin:0 0 10px; color:var(--gold-light); font-size:0.9rem;">1. Agregar producto a la orden</h4>
+          
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Tipo de ítem</label>
+              <select id="itemTipo" onchange="actualizarOpcionesVenta()">
+                <option value="Perfume Sellado">Perfume Sellado</option>
+                <option value="Perfume Abierto">Perfume abierto (frasco entero)</option>
+                <option value="Decant">Decant (Fraccionado)</option>
+                <option value="Decant Vacío">Decant vacío</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>¿Dónde se vendió? (de aquí se descontará el stock)</label>
+              <select id="vtaCanal">
+                <option value="Alpha Móvil" selected>Alpha Móvil</option>
+                <option value="Tienda Local">Tienda Local</option>
+                <option value="Barbería">Barbería</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Buscar producto</label>
+            <div class="search-box" style="margin:0;">
+              <input type="text" id="itemBuscador" placeholder="Escribe el nombre..." oninput="filtrarPerfumesVenta()">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Seleccionar producto disponible</label>
+            <select id="itemPerfume" onchange="mostrarPreviewPerfumeVenta()"></select>
+          </div>
+
+          <div id="previewPerfumeVenta" class="preview-card hidden">
+            <img id="prevImg" src="" alt="Perfume" onerror="this.src='https://static.vecteezy.com/system/resources/thumbnails/067/553/667/small/minimalist-graphic-illustration-of-a-bottle-useful-for-beauty-wellness-or-container-themes-simplicity-and-clean-design-enhance-visual-impact-vector.jpg'">
+            <div>
+              <h4 id="prevNombre" style="margin:0 0 3px; font-size:0.88rem; color:var(--ivory);">--</h4>
+              <p id="prevStock" style="margin:0; font-size:0.75rem; color:var(--gold-light);">Stock disponible: --</p>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div id="grpTamano" class="form-group hidden">
+              <label>Tamaño de decant</label>
+              <select id="itemTamano" onchange="mostrarPreviewPerfumeVenta()">
+                <option value="2ml">2ml</option>
+                <option value="3ml" selected>3ml</option>
+                <option value="5ml">5ml</option>
+                <option value="10ml">10ml</option>
+                <option value="30ml">30ml</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Cantidad</label>
+              <input type="number" id="itemCantidad" value="1" min="1">
+            </div>
+            <div class="form-group">
+              <label>Precio Cobrado por Unidad (S/)</label>
+              <input type="number" step="0.01" id="itemPrecio" placeholder="Ej: 25.00">
+            </div>
+          </div>
+
+          <button type="button" onclick="agregarAlCarrito()" class="btn-add" style="width:100%; margin-top:6px; padding:10px;">➕ Agregar este ítem a la venta</button>
+        </div>
+
+        <div class="cart-box">
+          <h4 style="margin:0 0 10px; color:var(--ivory); border-bottom:1px solid var(--border); padding-bottom:6px;">🛍️ Detalle de la Venta Actual</h4>
+          <div class="p15-panel">
+            <span>Marklife P15 · <strong id="p15Estado" role="status">Desconectada</strong></span>
+            <button type="button" id="p15Conectar" class="btn-sec">Conectar P15</button>
+            <p id="p15Mensaje" aria-live="polite">Etiquetas de 40 × 12 mm. Una etiqueta por pulsación.</p>
+            <p id="p15Resultado" aria-live="polite"></p>
+          </div>
+          <div id="listaCarrito"><p class="empty-msg">El carrito está vacío. Agrega productos arriba.</p></div>
+          <div class="cart-total" id="txtTotalVenta">Total a cobrar: S/ 0.00</div>
+        </div>
+
+        <form id="formVenta" style="margin-top:18px;">
+          <h4 style="margin:0 0 10px; color:var(--gold-light); font-size:0.9rem;">2. Datos del pago, envío y observaciones</h4>
+          <div class="grid-2" style="grid-template-columns:1fr;">
+            <div class="form-group">
+              <label>Método de pago</label>
+              <select id="vtaMetodoPago">
+                <option value="Yape">Yape / Plin</option>
+                <option value="Efectivo">Efectivo</option>
+                <option value="Tarjeta">Tarjeta</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- CAMPO NOTAS/OBSERVACIONES DE LA VENTA -->
+          <div class="form-group" style="margin-top:6px;">
+            <label>📝 Observaciones / Notas de la venta (Opcional)</label>
+            <textarea id="vtaNotas" placeholder="Ej: Cliente solicitó envío urgente por Olva, coordinó entrega en San Isidro, etc."></textarea>
+          </div>
+
+          <div class="form-group" style="margin-top:10px;">
+            <button type="button" onclick="abrirModalQRYape()" class="btn-yape" style="padding:10px; font-size:0.85rem;">📱 Ver QR de Yape para Cobro</button>
+          </div>
+
+          <div class="form-group" style="margin-top:8px;">
+            <label>📸 Foto del Comprobante / Pantalla de Yape (Opcional)</label>
+            <input type="file" id="vtaFotoComprobante" accept="image/*" capture="environment" onchange="previsualizarComprobante(event)">
+            <div id="previewComprobanteContainer" class="hidden" style="margin-top:10px; text-align:center;">
+              <img id="imgComprobantePreview" src="" alt="Comprobante" style="max-width:180px; max-height:220px; border-radius:8px; border:1px solid var(--gold);">
+            </div>
+          </div>
+
+          <button type="submit" id="btnSubmitVenta" style="margin-top:12px; font-size:1rem; padding:14px;">✅ Procesar Venta Completa</button>
+        </form>
+      </div>
+
+      <!-- TAB STOCK -->
+      <div id="tab-stock" class="card hidden">
+        <div id="secCrearProducto" class="hidden inventory-create-overlay" onclick="if(event.target === this) cerrarModalCrearProducto()">
+          <section class="inventory-create-panel" role="dialog" aria-modal="true" aria-labelledby="tituloCrearProducto">
+          <div class="inventory-create-heading">
+            <div><p class="traslado-etiqueta">GESTIÓN DE INVENTARIO</p><h3 id="tituloCrearProducto">Añadir nuevo producto</h3><p>Completa los datos para registrar un producto o un nuevo lote.</p></div>
+            <button type="button" class="traslado-cerrar" aria-label="Cerrar" onclick="cerrarModalCrearProducto()">×</button>
+          </div>
+          <form id="formStock">
+            <div class="form-group">
+              <label>Tipo de registro</label>
+              <select id="stkTipo" onchange="toggleCamposStock()">
+                <option value="Perfume Sellado">Perfume Sellado (Botella Entera)</option>
+                <option value="Perfume para Decant">Perfume Abierto p/ Decants</option>
+                <option value="Decant Vacío">Envase Decant Vacío (Lote)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Nombre / Descripción</label>
+              <input type="text" id="stkNombre" placeholder="Ej: Sauvage EDP o Envase Spray Atomizador" required>
+            </div>
+            <div class="form-group">
+              <label>URL de Imagen (Opcional)</label>
+              <input type="url" id="stkImagen" placeholder="https://ejemplo.com/imagen.jpg">
+            </div>
+            <div class="form-group" id="grpAudioPerfume">
+              <label for="stkAudio">Audio para el catálogo (Opcional)</label>
+              <input type="file" id="stkAudio" accept="audio/*">
+              <small style="color:var(--muted);">Al tocar la imagen o el nombre del perfume en el catálogo, se reproducirá este audio.</small>
+            </div>
+
+            <div id="grpTamanoBotella" class="form-group">
+              <label id="lblTamanoBotella">Capacidad de la Botella</label>
+              <select id="stkTamanoBotella">
+                <option value="100ml">100ml</option>
+                <option value="120ml">120ml</option>
+                <option value="125ml">125ml</option>
+                <option value="200ml">200ml</option>
+              </select>
+            </div>
+
+            <div id="grpUbicacionStock" class="form-group">
+              <label>Ubicación del stock</label>
+              <select id="stkUbicacion">
+                <option value="Tienda Local">Tienda Local</option>
+                <option value="Alpha Móvil">Alpha Móvil</option>
+                <option value="Barbería">Barbería</option>
+              </select>
+            </div>
+
+            <div id="grpPreciosDecant" class="form-group">
+              <label>Precios de venta por decant (S/)</label>
+              <div class="grid-2">
+                <div><label for="stkPrecioDecant3">3 ml (S/)</label><input type="number" min="0" step="0.01" id="stkPrecioDecant3" placeholder="Precio"></div>
+                <div><label for="stkPrecioDecant5">5 ml (S/)</label><input type="number" min="0" step="0.01" id="stkPrecioDecant5" placeholder="Precio"></div>
+                <div><label for="stkPrecioDecant10">10 ml (S/)</label><input type="number" min="0" step="0.01" id="stkPrecioDecant10" placeholder="Precio"></div>
+                <div><label for="stkPrecioDecant30">30 ml (S/)</label><input type="number" min="0" step="0.01" id="stkPrecioDecant30" placeholder="Precio"></div>
+              </div>
+            </div>
+
+            <div id="grpTamanoVacios" class="form-group hidden">
+              <label>Capacidad del envase vacío</label>
+              <select id="stkTamanoVacios">
+                <option value="2ml">2ml</option>
+                <option value="3ml">3ml</option>
+                <option value="5ml">5ml</option>
+                <option value="10ml">10ml</option>
+                <option value="30ml">30ml</option>
+              </select>
+            </div>
+
+            <div class="grid-2">
+              <div class="form-group">
+                <label id="lblPrecioStock">Costo Comprado (S/)</label>
+              <input type="number" min="0" step="0.01" id="stkPrecio" placeholder="Ej: 65.00 (total del lote)" value="0.00">
+              </div>
+              <div class="form-group">
+                <label>Precio Sugerido de Venta / PVP (S/)</label>
+                <input type="number" step="0.01" id="stkPrecioSugerido" placeholder="Ej: 120.00" value="0.00">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label id="lblCantidadStock">Cantidad de unidades en el Lote</label>
+              <input type="number" min="1" id="stkCantidad" placeholder="Ej: 112 envases" value="1" required>
+            </div>
+
+            <button type="submit">Guardar en Inventario</button>
+          </form>
+          </section>
+        </div>
+
+        <div class="inventory-heading"><div><h3>📦 Catálogo e Inventario</h3><span>Control rápido de stock, ubicación y precios</span></div><button type="button" id="btnAbrirCrearProducto" class="btn-add hidden" onclick="abrirModalCrearProducto()">＋ Añadir nuevo producto</button></div>
+
+        <div class="inv-summary-grid">
+          <div class="inv-summary-card">
+            <h5>Total Ítems</h5>
+            <div class="val" id="metrTotal">0</div>
+          </div>
+          <div class="inv-summary-card">
+            <h5>Stock Bajo</h5>
+            <div class="val" id="metrBajo" style="color:var(--warning);">0</div>
+          </div>
+          <div class="inv-summary-card">
+            <h5>Agotados</h5>
+            <div class="val" id="metrAgotado" style="color:var(--danger);">0</div>
+          </div>
+        </div>
+        
+        <div class="inventory-toolbar">
+          <div class="search-box">
+            <input type="text" id="inputBusqueda" placeholder="Buscar producto por nombre..." oninput="filtrarInventario()">
+          </div>
+          <div class="inventory-sort">
+            <label for="ordenInventario">Ordenar</label>
+            <select id="ordenInventario" onchange="filtrarInventario()">
+              <option value="nombre">Nombre (A–Z)</option>
+              <option value="stock_asc">Menor stock</option>
+              <option value="stock_desc">Mayor stock</option>
+              <option value="precio_asc">Menor precio</option>
+              <option value="precio_desc">Mayor precio</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="inv-filter-chips">
+          <button class="chip-btn active" onclick="filtrarCategoriaChip('TODOS', this)">🌐 Todos</button>
+          <button class="chip-btn" onclick="filtrarCategoriaChip('SELLADO', this)">🧴 Sellados</button>
+          <button class="chip-btn" onclick="filtrarCategoriaChip('DECANT', this)">🧪 Abiertos p/ Decant</button>
+          <button class="chip-btn" onclick="filtrarCategoriaChip('VACIO', this)">📦 Envases Vacíos</button>
+          <button type="button" class="chip-btn" onclick="filtrarCategoriaChip('BAJO', this)">⚠️ Stock bajo</button>
+          <button type="button" class="chip-btn" onclick="filtrarCategoriaChip('AGOTADO', this)">⛔ Agotados</button>
+        </div>
+
+        <div id="gridInventario" class="inv-grid">Cargando catálogo...</div>
+      </div>
+
+      <!-- TAB HISTORIAL -->
+      <div id="tab-historial" class="card hidden">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+          <h3 style="margin:0;">📊 Historial y Análisis de Ventas</h3>
+          <button id="btnExportarExcel" onclick="exportarExcel()" class="btn-add hidden" style="padding:8px 14px; font-size:0.8rem; background:linear-gradient(135deg, #107c41, #084e28); border-color:#21a366;">📊 Excel de ventas e inventario (.xlsx)</button>
+        </div>
+
+        <div class="report-filters" aria-label="Filtrar reportes por fecha">
+          <div><label for="fechaReporteDesde">Desde</label><input type="date" id="fechaReporteDesde" onchange="cargarHistorial()"></div>
+          <div><label for="fechaReporteHasta">Hasta</label><input type="date" id="fechaReporteHasta" onchange="cargarHistorial()"></div>
+          <button type="button" class="btn-sec" onclick="limpiarFiltroFechas()">Limpiar fechas</button>
+        </div>
+
+        <div id="resumenMasVendidos" class="chart-container" aria-live="polite"></div>
+
+        <!-- GRÁFICO 1: DIARIO DE VENTAS -->
+        <div class="chart-container">
+          <h4 id="txtTituloGrafico" style="margin:0 0 10px; color:var(--gold-light); font-size:0.9rem; text-align:center;">📈 Rendimiento Diario vs Metas</h4>
+          <div id="controlesMetasAdmin" class="hidden" style="display:flex; justify-content:center; align-items:end; flex-wrap:wrap; gap:8px; margin:0 0 12px;">
+            <div><label for="fechaMetaDiaria" style="display:block; font-size:0.75rem;">Fecha de la meta</label><input type="date" id="fechaMetaDiaria" onchange="cargarMetaEnFormulario()"></div>
+            <div><label for="montoMetaDiaria" style="display:block; font-size:0.75rem;">Meta (S/)</label><input type="number" id="montoMetaDiaria" min="0" step="0.01" value="500" style="width:110px;"></div>
+            <button type="button" class="btn-sec" onclick="guardarMetaDiaria()">Guardar meta</button>
+            <button type="button" class="btn-sec" onclick="quitarMetaDiaria()">Restablecer día</button>
+            <div><label for="fechaEquilibrioDiario" style="display:block; font-size:0.75rem;">Fecha del punto de equilibrio</label><input type="date" id="fechaEquilibrioDiario" onchange="cargarEquilibrioEnFormulario()"></div>
+            <div><label for="montoEquilibrioDiario" style="display:block; font-size:0.75rem;">Punto de equilibrio (S/)</label><input type="number" id="montoEquilibrioDiario" min="0" step="0.01" value="140" style="width:110px;"></div>
+            <button type="button" class="btn-sec" onclick="guardarPuntoEquilibrioDiario()">Guardar punto</button>
+            <button type="button" class="btn-sec" onclick="quitarPuntoEquilibrioDiario()">Restablecer punto</button>
+          </div>
+          <canvas id="chartVentasDiarias" height="180"></canvas>
+        </div>
+
+        <!-- GRÁFICO 2: COMPARATIVA POR TRABAJADOR -->
+        <div class="chart-container">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+            <h4 style="margin:0; color:var(--gold-light); font-size:0.9rem;">👥 Ventas Totales por Trabajador / Vendedor</h4>
+            <select id="selectFiltroVendedor" onchange="actualizarGraficoVendedores()" style="width:auto; padding:4px 8px; font-size:0.75rem;">
+              <option value="TODOS">Todo el Historial</option>
+              <option value="HOY">Solo Ventas de Hoy</option>
+            </select>
+          </div>
+          <canvas id="chartVentasVendedor" height="180"></canvas>
+        </div>
+
+        <h3 style="margin:20px 0 10px;">📋 Cierre Diario de Cajas</h3>
+        <div id="listaVentas">Cargando historial...</div>
+      </div>
+
+      <!-- TAB CIERRE DE INVENTARIO -->
+      <div id="tab-cierre" class="card hidden">
+        <h3 style="margin-top:0;">🧾 Cierre diario por ubicación</h3>
+        <p style="color:var(--muted);">Registra y edita las cantidades al final del día. Cada ubicación tiene su cierre independiente.</p>
+        <div class="report-filters"><div><label for="fechaCierreInventario">Día del cierre</label><input type="date" id="fechaCierreInventario" onchange="cargarCierreInventario()"></div></div>
+        <small id="estadoCierreInventario" style="display:block;margin-top:8px;color:var(--muted);"></small>
+        <div id="cierresInventarioPorUbicacion" style="display:grid;gap:12px;margin-top:12px;"></div>
+        <div id="eventosInventarioCierre" style="margin-top:14px;"></div>
+      </div>
+
+      <!-- TAB ASISTENCIA -->
+      <div id="tab-asistencia" class="card hidden">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+          <h3 style="margin:0;">⏱️ Control de Asistencia</h3>
+          <button id="btnExportarAsistencia" onclick="exportarAsistenciaExcel()" class="btn-add hidden" style="padding:8px 14px; font-size:0.8rem; background:linear-gradient(135deg, #107c41, #084e28); border-color:#21a366;">📊 Reporte Asistencia (.xlsx)</button>
+        </div>
+
+        <div class="timer-card">
+          <h4 style="margin:0; color:var(--ivory);">Registro de Jornada de Hoy</h4>
+          <p id="txtEstadoJornada" style="margin:6px 0 10px; font-size:0.85rem;">Cargando estado...</p>
+          <div id="timerDisplay" class="timer-display">00:00:00</div>
+          <button id="btnMarcarIngreso" onclick="marcarIngresoTrabajo()" style="background:linear-gradient(135deg, #28a745, #1e7e34); border-color:#28a745; font-size:1rem; padding:12px;">▶️ Inicio de Trabajo (Marcar Entrada)</button>
+          <button id="btnMarcarSalida" onclick="marcarSalidaTrabajo()" class="hidden" style="background:linear-gradient(135deg, #dc3545, #bd2130); border-color:#dc3545; font-size:1rem; padding:12px;">⏹️ Marcar Salida del Trabajo</button>
+        </div>
+
+        <h4 style="margin:20px 0 10px; color:var(--gold-light);">📋 Registros de Asistencia Recientes</h4>
+        <div id="listaAsistencia">Cargando historial de asistencia...</div>
+      </div>
+
+      <!-- TAB CONTACTOS -->
+      <div id="tab-contactos" class="card hidden">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+          <h3 style="margin:0;">📱 Contactos de Marketing</h3>
+          <button type="button" class="btn-sec" onclick="cargarContactosMarketing()" style="padding:8px 14px; font-size:0.8rem;">🔄 Actualizar</button>
+        </div>
+        <p style="font-size:0.8rem; color:var(--muted);">Solo los contactos marcados como <strong>exitosa</strong> se usan para envíos de recordatorios, promociones, combos o nuevos ingresos.</p>
+        <div id="statsContactos" style="margin:8px 0; font-size:0.8rem; color:var(--gold-light);"></div>
+        <div id="tablaContactos" style="overflow-x:auto;">Cargando contactos...</div>
+      </div>
+    </section>
+
+    <div id="avisoApp" class="toast-region" role="status" aria-live="polite"></div>
+
+    <div id="modalTrasladoStock" class="modal-overlay hidden" onclick="if(event.target === this) cerrarModalTrasladoStock()">
+      <div class="modal-content traslado-modal" role="dialog" aria-modal="true" aria-labelledby="trasladoTitulo">
+        <button type="button" class="traslado-cerrar" aria-label="Cerrar" onclick="cerrarModalTrasladoStock()">×</button>
+        <div class="traslado-icono">↔️</div>
+        <p class="traslado-etiqueta">GESTIÓN DE INVENTARIO</p>
+        <h3 id="trasladoTitulo">Mover perfume</h3>
+        <p id="trasladoNombre" class="traslado-nombre"></p>
+        <p class="traslado-ayuda">Elige de dónde saldrán las unidades. Se moverán al otro punto de venta.</p>
+        <div class="traslado-ubicaciones">
+          <label class="traslado-opcion" for="trasladoOrigenLocal">
+            <input type="radio" name="trasladoOrigen" id="trasladoOrigenLocal" value="Tienda Local" onchange="actualizarFormularioTraslado()">
+            <span class="traslado-opcion-icono">🏬</span><span class="traslado-opcion-texto">Tienda Local</span>
+            <strong id="trasladoStockLocal">0</strong><small>disponibles</small>
+          </label>
+          <label class="traslado-opcion" for="trasladoOrigenMovil">
+            <input type="radio" name="trasladoOrigen" id="trasladoOrigenMovil" value="Alpha Móvil" onchange="actualizarFormularioTraslado()">
+            <span class="traslado-opcion-icono">🚐</span><span class="traslado-opcion-texto">Alpha Móvil</span>
+            <strong id="trasladoStockMovil">0</strong><small>disponibles</small>
+          </label>
+          <label class="traslado-opcion" for="trasladoOrigenBarberia">
+            <input type="radio" name="trasladoOrigen" id="trasladoOrigenBarberia" value="Barbería" onchange="actualizarFormularioTraslado()">
+            <span class="traslado-opcion-icono">💈</span><span class="traslado-opcion-texto">Barbería</span>
+            <strong id="trasladoStockBarberia">0</strong><small>disponibles</small>
+          </label>
+        </div>
+        <div class="form-group"><label for="trasladoDestinoSelect">Ubicación de destino</label><select id="trasladoDestinoSelect" onchange="actualizarFormularioTraslado()"><option value="Alpha Móvil">Alpha Móvil</option><option value="Tienda Local">Tienda Local</option><option value="Barbería">Barbería</option></select></div>
+        <div class="traslado-resumen"><span>Destino</span><strong id="trasladoDestino">Selecciona un origen</strong></div>
+        <div class="form-group traslado-cantidad">
+          <label for="trasladoCantidad">¿Cuántas unidades mover?</label>
+          <input type="number" id="trasladoCantidad" min="1" step="1" value="1" inputmode="numeric" oninput="validarCantidadTraslado()">
+          <small id="trasladoMaximo">Selecciona una ubicación para ver el stock disponible.</small>
+        </div>
+        <div class="traslado-acciones">
+          <button type="button" class="btn-sec" onclick="cerrarModalTrasladoStock()">Cancelar</button>
+          <button type="button" id="btnConfirmarTraslado" onclick="confirmarTrasladoPerfume()" disabled>Confirmar traslado</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalDetalleInventario" class="modal-overlay hidden" onclick="if(event.target === this) cerrarModalInventario()">
+      <div class="modal-content inventory-modal" role="dialog" aria-modal="true" aria-labelledby="detalleInventarioTitulo">
+        <button type="button" class="traslado-cerrar" aria-label="Cerrar" onclick="cerrarModalInventario()">×</button>
+        <div id="contenidoDetalleInventario"></div>
+      </div>
+    </div>
+
+    <div id="modalImagenProducto" class="modal-overlay hidden" onclick="if(event.target === this) cerrarModalImagenProducto()">
+      <section class="modal-content inventory-image-modal" role="dialog" aria-modal="true" aria-labelledby="tituloImagenProducto">
+        <button type="button" id="cerrarImagenProducto" class="traslado-cerrar" aria-label="Cerrar" onclick="cerrarModalImagenProducto()">×</button>
+        <p class="traslado-etiqueta">IMAGEN DEL PERFUME</p>
+        <h3 id="tituloImagenProducto">Cambiar imagen</h3>
+        <p id="nombreImagenProducto"></p>
+        <img id="previewImagenProducto" class="inventory-image-preview" alt="Vista previa de la imagen del perfume">
+        <form id="formImagenProducto" onsubmit="event.preventDefault();guardarImagenProducto()">
+          <div class="form-group">
+            <label for="archivoImagenProducto">Seleccionar nueva imagen</label>
+            <input type="file" id="archivoImagenProducto" accept="image/jpeg,image/png,image/webp" onchange="previsualizarImagenProducto()" aria-describedby="ayudaImagenProducto estadoImagenProducto">
+            <small id="ayudaImagenProducto">JPG, PNG o WebP, hasta 5 MB. La imagen se aplicará al perfume en todas sus ubicaciones y en el catálogo público.</small>
+          </div>
+          <p id="estadoImagenProducto" role="status" aria-live="polite"></p>
+          <div class="traslado-acciones">
+            <button type="button" id="cancelarImagenProducto" class="btn-sec" onclick="cerrarModalImagenProducto()">Cancelar</button>
+            <button type="submit" id="btnGuardarImagenProducto" disabled>Guardar imagen</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <!-- MODAL COMPROBANTE -->
+    <div id="modalComprobante" class="modal-overlay hidden">
+      <div class="modal-content">
+        <h4 style="margin:0 0 12px; color:var(--gold-light);">📸 Comprobante de Pago</h4>
+        <img id="modalImgComprobante" src="" alt="Comprobante de pago">
+        <button onclick="cerrarModalComprobante()" style="margin-top:14px;">Cerrar</button>
+      </div>
+    </div>
+
+    <!-- MODAL QR YAPE -->
+    <div id="modalQRYape" class="modal-overlay hidden">
+      <div class="modal-content" style="border-color:#b15eff;">
+        <h4 style="margin:0 0 8px; color:#f1c36d;">📱 Escanea para Yapear</h4>
+        <p style="margin:0 0 12px; font-size:0.8rem; color:var(--ivory);">ALPHA Perfumes y Decants</p>
+        <img id="imgQRYape" src="assets/qr-yape.png.jpeg" alt="Código QR Yape" style="max-width:100%; max-height:65vh; border-radius:8px; border:1px solid #b15eff; object-fit:contain;">
+        <p style="margin:10px 0 0; font-weight:700; color:var(--ivory);">900891749</p>
+        <button onclick="cerrarModalQRYape()" style="margin-top:14px; background:linear-gradient(135deg, #742284, #5c189a); border-color:#b15eff;">Cerrar QR</button>
+      </div>
+    </div>
+
+    <!-- MODAL SELECCIÓN PERFUME Y TAMAÑO DEL DECANT DE REGALO -->
+    <div id="modalRegaloPerfume" class="modal-overlay hidden">
+      <div class="modal-content" style="max-width: 450px; text-align: left;">
+        <h4 id="tituloRegaloDecant" style="margin:0 0 8px; color:var(--gold-light); text-align:center;">🎁 Seleccionar Decant de Regalo</h4>
+        <p style="font-size:0.8rem; text-align:center; margin-bottom:12px; color:var(--muted);">Escribe para buscar el perfume disponible para el regalito:</p>
+        
+        <div class="form-group">
+          <div class="search-box" style="margin:0;">
+            <input type="text" id="regaloBuscador" placeholder="Buscar perfume de regalo..." oninput="filtrarRegalosModal()">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Perfumes disponibles para Decant:</label>
+          <select id="selectRegaloModal" onchange="mostrarPreviewRegaloModal()"></select>
+        </div>
+
+        <div class="form-group">
+          <label for="tamanoRegaloModal">Tamaño del decant de regalo</label>
+          <select id="tamanoRegaloModal" onchange="mostrarPreviewRegaloModal()">
+            <option value="3ml">3 ml</option>
+            <option value="5ml">5 ml</option>
+            <option value="10ml">10 ml</option>
+          </select>
+        </div>
+
+        <div id="previewRegaloCard" class="preview-card hidden" style="margin-top:10px;">
+          <img id="imgRegaloPreview" src="" alt="Perfume Regalo" onerror="this.src='https://static.vecteezy.com/system/resources/thumbnails/067/553/667/small/minimalist-graphic-illustration-of-a-bottle-useful-for-beauty-wellness-or-container-themes-simplicity-and-clean-design-enhance-visual-impact-vector.jpg'">
+          <div>
+            <h4 id="nombreRegaloPreview" style="margin:0 0 3px; font-size:0.88rem; color:var(--ivory);">--</h4>
+            <p id="stockRegaloPreview" style="margin:0; font-size:0.75rem; color:var(--gold-light);">--</p>
+            <p id="costoRegaloPreview" style="margin:4px 0 0; font-size:0.75rem; color:var(--muted);"></p>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:16px;">
+          <button type="button" onclick="confirmarRegaloDecant()" style="background:linear-gradient(135deg, #28a745, #1e7e34); border-color:#28a745; font-size:0.85rem;">🎁 Confirmar Regalo</button>
+          <button type="button" onclick="cerrarModalRegalo()" class="btn-sec" style="font-size:0.85rem;">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="marklife-p15.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+

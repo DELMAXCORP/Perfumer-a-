@@ -1,0 +1,203 @@
+(() => {
+  const IMG_DEFAULT = 'https://static.vecteezy.com/system/resources/thumbnails/067/553/667/small/minimalist-graphic-illustration-of-a-bottle-useful-for-beauty-wellness-or-container-themes-simplicity-and-clean-design-enhance-visual-impact-vector.jpg';
+  const grid = document.getElementById('catalog-grid');
+  const count = document.getElementById('product-count');
+  const search = document.getElementById('catalog-search');
+  const status = document.getElementById('catalog-status');
+  let products = [];
+  let currentAudio = null;
+  const norm = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
+  const isSealed = product => norm(product.tipo).trim() === 'perfume sellado';
+
+  function playProductAudio(product) {
+    if (!product.audio_url) {
+      status.textContent = `El perfume ${product.nombre} todavía no tiene audio.`;
+      return;
+    }
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    }
+    currentAudio = new Audio(product.audio_url);
+    currentAudio.play().then(() => {
+      status.textContent = `Reproduciendo audio de ${product.nombre}.`;
+    }).catch(error => {
+      status.textContent = `No se pudo reproducir el audio de ${product.nombre}.`;
+      console.error('Error al reproducir audio del catálogo:', error);
+    });
+  }
+
+  function makeAudioButton(product, content, className) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    const action = product.audio_url
+      ? 'Mostrar u ocultar precios de decant y reproducir audio'
+      : 'Mostrar u ocultar precios de decant';
+    button.setAttribute('aria-label', `${action} de ${product.nombre}`);
+    button.title = action;
+    button.append(content);
+    button.addEventListener('click', () => {
+      playProductAudio(product);
+      const details = button.closest('.product-card').querySelector('.decant-prices');
+      if (!details) return;
+      details.hidden = !details.hidden;
+      button.closest('.product-card').querySelectorAll('.product-image-trigger,.product-name-trigger')
+        .forEach(trigger => trigger.setAttribute('aria-expanded', String(!details.hidden)));
+    });
+    return button;
+  }
+
+  function getDecantPrices(product) {
+    const normalized = norm(product.nombre).toUpperCase();
+    let fallback = [15, 25, 35, 90];
+    if (normalized.includes('AL HARAMAIN') || normalized.includes('GOLD EDITION')) fallback = [25, 45, 65, 195];
+    else if (normalized.includes('VALENTINO INTENSE')) fallback = [30, 45, 80, 240];
+    else if (normalized.includes('LIQUID BRUN') || normalized.includes('LIQUID BRUM') || normalized.includes('NIGHT OUT')) fallback = [20, 30, 40, 120];
+    return ['3ml', '5ml', '10ml', '30ml'].map((size, index) => {
+      const raw = product[`precio_decant_${size}`];
+      const saved = Number(raw);
+      return raw !== null && raw !== undefined && raw !== '' && Number.isFinite(saved) ? saved : fallback[index];
+    });
+  }
+
+  function deduplicateProducts(items) {
+    const unique = new Map();
+    items.forEach(product => {
+      const key = norm(product.nombre).replace(/\s+/g, ' ').trim();
+      const current = unique.get(key);
+      if (!current) {
+        unique.set(key, {
+          ...product,
+          _tieneSellado: isSealed(product),
+          agotado: isSealed(product) && product.agotado === true
+        });
+        return;
+      }
+
+      const esSellado = isSealed(product);
+      // Una botella disponible en cualquier ubicación mantiene disponible el perfume.
+      const agotadoSellado = esSellado
+        ? product.agotado === true && (!current._tieneSellado || current.agotado === true)
+        : current.agotado === true;
+      if (esSellado && (!current._tieneSellado || Number(product.precio_venta) > Number(current.precio_venta || 0))) {
+        current.precio_venta = product.precio_venta;
+      }
+      current.agotado = agotadoSellado;
+      current._tieneSellado = current._tieneSellado || esSellado;
+
+      const tieneDecants = ['precio_decant_3ml', 'precio_decant_5ml', 'precio_decant_10ml', 'precio_decant_30ml']
+        .some(field => Number(product[field]) > 0);
+      const actualTieneDecants = ['precio_decant_3ml', 'precio_decant_5ml', 'precio_decant_10ml', 'precio_decant_30ml']
+        .some(field => Number(current[field]) > 0);
+      if ((product.tipo === 'Perfume para Decant' && current.tipo !== 'Perfume para Decant') || (tieneDecants && !actualTieneDecants)) {
+        const salePrice = current.precio_venta;
+        const agotado = current.agotado;
+        const tieneSellado = current._tieneSellado;
+        Object.assign(current, product);
+        if (tieneSellado) {
+          current.precio_venta = salePrice;
+          current.agotado = agotado;
+          current.tipo = 'Perfume Sellado';
+        }
+        current._tieneSellado = tieneSellado;
+      }
+    });
+    return [...unique.values()];
+  }
+
+  function renderProducts() {
+    const query = norm(search.value.trim());
+    const visible = products.filter(product => norm(`${product.nombre} ${product.tipo || ''} ${product.tamano || ''}`).includes(query));
+    count.textContent = `${visible.length} ${visible.length === 1 ? 'perfume' : 'perfumes'}`;
+    grid.replaceChildren();
+    if (!visible.length) {
+      const message = document.createElement('p');
+      message.className = 'message';
+      message.textContent = products.length ? 'No encontramos perfumes con esa búsqueda.' : 'Todavía no hay perfumes disponibles en el catálogo.';
+      grid.append(message);
+      return;
+    }
+
+    visible.forEach(product => {
+      const card = document.createElement('article');
+      card.className = 'product-card';
+      const image = document.createElement('img');
+      image.className = 'product-image';
+      image.src = product.imagen_url || IMG_DEFAULT;
+      image.alt = product.nombre || 'Perfume';
+      image.loading = 'lazy';
+      image.addEventListener('error', () => { image.src = IMG_DEFAULT; }, { once: true });
+      const imageButton = makeAudioButton(product, image, 'product-image-trigger');
+      imageButton.setAttribute('aria-expanded', 'false');
+      card.append(imageButton);
+
+      const info = document.createElement('div');
+      info.className = 'product-info';
+      const name = document.createElement('h3');
+      name.className = 'product-name';
+      const nameButton = makeAudioButton(product, document.createTextNode(product.nombre || 'Perfume'), 'product-name-trigger');
+      nameButton.setAttribute('aria-expanded', 'false');
+      name.append(nameButton);
+      const price = document.createElement('p');
+      price.className = 'product-price';
+      const esSellado = product._tieneSellado || isSealed(product);
+      const values = getDecantPrices(product);
+      const salePrice = Number(product.precio_venta || 0);
+      price.textContent = esSellado
+        ? (salePrice > 0 ? `Perfume sellado: S/ ${salePrice.toFixed(2)}` : 'Precio de botella no disponible')
+        : `Decants desde S/ ${values[0].toFixed(2)} (3 ml)`;
+      const decantPrices = document.createElement('div');
+      decantPrices.className = 'decant-prices';
+      decantPrices.hidden = true;
+      const decantHeading = document.createElement('p');
+      decantHeading.className = 'decant-prices-heading';
+      decantHeading.textContent = 'Precios de decant';
+      ['3ml', '5ml', '10ml', '30ml'].forEach((size, index) => {
+        const row = document.createElement('p');
+        row.className = 'decant-price-row';
+        row.textContent = `${size}: S/ ${values[index].toFixed(2)}`;
+        decantPrices.append(row);
+      });
+      decantPrices.prepend(decantHeading);
+      info.append(name, price);
+      if (esSellado && product.agotado) {
+        const availability = document.createElement('p');
+        availability.className = 'product-status-out';
+        availability.textContent = 'Perfume sellado agotado';
+        info.append(availability);
+      }
+      info.append(decantPrices);
+      card.append(info);
+      grid.append(card);
+    });
+  }
+
+  async function loadCatalog() {
+    try {
+      const { data, error } = await window.supabaseClient.from('catalogo_publico')
+        .select('id,nombre,tipo,tamano,precio_venta,imagen_url,audio_url,agotado,precio_decant_3ml,precio_decant_5ml,precio_decant_10ml,precio_decant_30ml')
+        .order('nombre', { ascending: true });
+      if (error) throw error;
+      // Incluye botellas selladas y productos disponibles para decant. Si hay
+      // filas de ambos tipos con el mismo nombre, deduplicateProducts conserva
+      // el precio sugerido de la botella sellada.
+      products = deduplicateProducts(data || []);
+      renderProducts();
+    } catch (error) {
+      count.textContent = 'No disponible';
+      grid.replaceChildren();
+      const message = document.createElement('p');
+      message.className = 'message';
+      message.textContent = 'No se pudo cargar el catálogo. Ejecuta la configuración SQL del catálogo y revisa tu conexión.';
+      grid.append(message);
+      console.error('Error al cargar el catálogo:', error);
+    }
+  }
+
+  search.addEventListener('input', renderProducts);
+  loadCatalog();
+  // Detecta nuevos productos o cambios de stock mientras el catálogo sigue abierto.
+  window.setInterval(() => { if (!document.hidden) loadCatalog(); }, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadCatalog(); });
+})();
