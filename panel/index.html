@@ -39,6 +39,7 @@
         <div class="brand"><img src="assets/alpha-logo.jpeg" alt="Alpha"><h1 class="brand-name">ALPHA</h1><p class="brand-tagline">PERFUMES Y DECANTS</p><div class="gold-rule"></div></div>
         <p id="userLogged" style="margin:12px 0 0; font-size:.8rem;"></p>
         <button onclick="cerrarSesion()" class="btn-sec" style="padding:6px 10px;font-size:.72rem;width:auto;margin-top:7px;">Cerrar sesión</button>
+        <button type="button" id="btnConectarImpresora" onclick="abrirConexionImpresora()" class="btn-sec" style="padding:6px 10px;font-size:.8rem;width:auto;margin-top:7px;">Conectar impresora</button>
       </header>
 
       <nav class="nav-tabs" aria-label="Secciones principales">
@@ -166,6 +167,10 @@
 
           <button type="submit" id="btnSubmitVenta" style="margin-top:12px; font-size:1rem; padding:14px;">✅ Procesar Venta Completa</button>
         </form>
+        <section id="ticketVentaReciente" class="hidden" style="margin-top:12px;" aria-live="polite">
+          <p id="ticketVentaEstado"></p>
+          <button type="button" class="btn-sec" onclick="imprimirTicketReciente()">Imprimir ticket</button>
+        </section>
       </div>
 
       <!-- TAB STOCK -->
@@ -393,6 +398,25 @@
       </div>
     </section>
 
+    <dialog id="conexionImpresora" aria-labelledby="conexionImpresoraTitulo">
+      <h3 id="conexionImpresoraTitulo">Conectar impresora CatPrinter</h3>
+      <label style="display:flex;gap:8px;align-items:center;"><input id="corregirOrdenHojas" type="checkbox" checked style="width:auto;"> Corregir hojas invertidas de CatPrinter (48 × 80 mm)</label>
+      <p>Deja esta opción activada si CatPrinter entrega primero la última hoja. Envía las hojas en orden inverso para compensarlo, conservando el orden dentro de cada hoja. Desactívala para impresoras que entregan las hojas en orden normal.</p>
+      <p>Si apagaste la X6 o reiniciaste Bluetooth, recupera la conexión desde Windows y CatPrinter.</p>
+      <ol>
+        <li>Enciende la impresora y comprueba que tenga papel.</li>
+        <li>Abre Bluetooth de Windows y comprueba el dispositivo YHK-A383. Si Windows ofrece conectar, selecciónalo.</li>
+        <li>Abre CatPrinter y vuelve a conectar la X6 desde ese programa si perdió el enlace.</li>
+        <li>Comprueba la cola de CatPrinter en Windows antes de reimprimir: el ticket pendiente podría salir al reconectar.</li>
+      </ol>
+      <p><a href="ms-settings:bluetooth">Abrir Bluetooth de Windows</a></p>
+      <p><a href="ms-settings:printers">Abrir impresoras y cola de Windows</a></p>
+      <small>El navegador puede pedir permiso para abrir Configuración. Si no abre, pulsa Windows + I y entra en Bluetooth y dispositivos. Esta página no puede comprobar ni restablecer la conexión de CatPrinter.</small>
+      <p>Al imprimir, selecciona CatPrinter, papel de 58 mm y escala personalizada de 100 %. Evita «Ajustar a página», que puede reducir todo el ticket. Si no hay un ticket reciente, elige una venta del Historial.</p>
+      <button type="button" id="btnReintentarTicket" onclick="reintentarTicketImpresora()">Volver a imprimir el ticket</button>
+      <button type="button" class="btn-sec" onclick="document.getElementById('conexionImpresora').close()">Cerrar</button>
+    </dialog>
+
     <div id="avisoApp" class="toast-region" role="status" aria-live="polite"></div>
 
     <div id="modalTrasladoStock" class="modal-overlay hidden" onclick="if(event.target === this) cerrarModalTrasladoStock()">
@@ -527,7 +551,8 @@
   </main>
 
   <script src="marklife-p15.js"></script>
-  <script src="app.js"></script>
+  <script src="ticket.js?v=catprinter-compacto-5"></script>
+  <script src="app.js?v=catprinter-hojas-3"></script>
 </body>
 </html>
 

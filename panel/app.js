@@ -32,6 +32,8 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     let carritoVenta = [];
     let comprobanteBase64 = null;
     let listaVentasCache = [];
+    let ultimaVentaTicket = null;
+    let ultimoTicketImpresion = null;
     let notasCierreCache = {};
     let listaAsistenciaCache = [];
     let registroAsistenciaActivo = null;
@@ -209,6 +211,11 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     client.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         usuarioActual = null;
+        ultimaVentaTicket = null;
+        ultimoTicketImpresion = null;
+        document.getElementById('conexionImpresora').close();
+        document.getElementById('alpha-ticket-frame')?.remove();
+        document.getElementById('ticketVentaReciente').classList.add('hidden');
         if (intervalTimer) clearInterval(intervalTimer);
         document.getElementById('sec-app').classList.add('hidden');
         document.getElementById('sec-login').classList.remove('hidden');
@@ -227,6 +234,37 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         iniciarApp();
       }
     });
+
+    async function imprimirTicket(venta) {
+      if (!usuarioActual || !venta) return;
+      ultimoTicketImpresion = venta;
+      try { await window.AlphaTicket.imprimir(venta, { corregirOrdenHojas: document.getElementById('corregirOrdenHojas').checked }); }
+      catch (error) { alert(error.message); }
+    }
+
+    function abrirConexionImpresora() {
+      if (!usuarioActual) return;
+      document.getElementById('btnReintentarTicket').disabled = !(ultimoTicketImpresion || ultimaVentaTicket);
+      document.getElementById('conexionImpresora').showModal();
+    }
+
+    try {
+      document.getElementById('corregirOrdenHojas').checked = localStorage.getItem('alpha-catprinter-invertir-hojas') !== 'false';
+    } catch { /* La preferencia funciona también sin almacenamiento local. */ }
+    document.getElementById('corregirOrdenHojas').addEventListener('change', event => {
+      try { localStorage.setItem('alpha-catprinter-invertir-hojas', String(event.target.checked)); } catch { /* Solo esta sesión. */ }
+    });
+
+    function reintentarTicketImpresora() {
+      const venta = ultimoTicketImpresion || ultimaVentaTicket;
+      if (!usuarioActual || !venta) return;
+      document.getElementById('conexionImpresora').close();
+      void imprimirTicket(venta);
+    }
+
+    function imprimirTicketReciente() {
+      void imprimirTicket(ultimaVentaTicket);
+    }
 
     async function iniciarApp() {
       document.getElementById('sec-login').classList.add('hidden');
@@ -1884,6 +1922,9 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
 
     function renderizarCarrito() {
+      if (carritoVenta.length) {
+        document.getElementById('ticketVentaReciente').classList.add('hidden');
+      }
       const cont = document.getElementById('listaCarrito');
       if (!carritoVenta.length) {
         cont.innerHTML = '<p class="empty-msg">El carrito está vacío. Agrega productos arriba.</p>';
@@ -2110,13 +2151,16 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
           notas: notasTexto || null
         };
 
-        const { error } = await client.from('ventas').insert([venta]);
+        const { data: ventaRegistrada, error } = await client.from('ventas').insert([venta]).select('*').single();
         if (error) {
           await restaurarReservaStock(reservaStock);
           reservaStock = [];
           alert('Error al registrar la venta: ' + error.message);
         } else {
           ventaGuardada = true;
+          ultimaVentaTicket = ventaRegistrada;
+          document.getElementById('ticketVentaEstado').textContent = 'Venta #' + ventaRegistrada.id + ' registrada correctamente.';
+          document.getElementById('ticketVentaReciente').classList.remove('hidden');
 
           // --- REPRODUCIR SONIDO AL TENER ÉXITO ---
           sonidoVenta.currentTime = 0; // Reinicia el audio si se presiona varias veces seguidas
@@ -2132,7 +2176,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
             setTimeout(terminar, Number.isFinite(sonidoVenta.duration) ? sonidoVenta.duration * 1000 + 1500 : 20000);
           });
           await comprobarMetaVentasDiaria(audioVentaFinalizado);
-          mostrarAviso('Venta registrada correctamente.', 'success');
+          mostrarAviso('Venta registrada correctamente. Puedes imprimir el ticket desde el Historial.', 'success');
           const agotadosEnVenta = reservaStock.filter(r => r.mlAnterior !== undefined && Number(r.mlReservado) === 0);
           if (agotadosEnVenta.length) {
             const agotados = agotadosEnVenta.map(r => listaProductos.find(p => String(p.id) === String(r.id))?.nombre || 'Perfume').join(', ');
@@ -2181,6 +2225,12 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         guardarBorradorVenta();
       });
     });
+
+    function imprimirTicketVenta(indice) {
+      const venta = listaVentasCache[indice];
+      if (!venta) return alert('No se encontró la venta. Actualiza el historial e inténtalo nuevamente.');
+      void imprimirTicket(venta);
+    }
 
     async function cargarHistorial() {
       const { data: ventasCargadas } = await client.from('ventas').select('*').order('fecha', { ascending: false });
@@ -2390,6 +2440,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
 
                 <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
                   <button type="button" id="btn-detalles-venta-${v.id}" onclick="toggleDetallesVenta('${v.id}')" class="btn-sec" style="padding:4px 10px; font-size:0.75rem; width:auto; margin:0;">＋ Más detalles de esta venta</button>
+                  <button type="button" onclick="imprimirTicketVenta(${idx})" class="btn-sec" style="padding:4px 10px; font-size:0.75rem; width:auto; margin:0;">Imprimir ticket</button>
                   ${v.comprobante_url ? `<button type="button" onclick="abrirModalComprobante(${idx})" class="btn-sec" style="padding:4px 10px; font-size:0.75rem; width:auto; margin:0;">📸 Ver Captura</button>` : ''}
                   ${esUsuarioAdmin ? `<button type="button" onclick="deshacerVenta(${v.id})" class="btn-undo">↩️ Deshacer Venta</button>` : ''}
                 </div>

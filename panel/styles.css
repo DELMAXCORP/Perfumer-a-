@@ -2,6 +2,11 @@
     .inventory-image-preview { display: block; width: 100%; height: 220px; margin: 14px auto; object-fit: contain; border-radius: 10px; background: rgba(2,19,38,.5); }
     .inventory-image-modal small { display: block; margin-top: 8px; color: var(--muted); line-height: 1.5; }
     #estadoImagenProducto { min-height: 1.5em; font-size: .85rem; color: var(--gold-light); }
+    #conexionImpresora { width: min(560px, 92vw); max-height: 85vh; overflow: auto; padding: 24px; border: 1px solid var(--gold); border-radius: 14px; background: var(--night); color: var(--ivory); font: inherit; }
+    #conexionImpresora::backdrop { background: rgba(0, 0, 0, .7); }
+    #conexionImpresora li { margin-bottom: 10px; }
+    #conexionImpresora a { color: var(--gold-light); }
+    #conexionImpresora small { display: block; color: var(--muted); line-height: 1.5; }
     :root {
       --night: #031a34;
       --navy: #062647;
