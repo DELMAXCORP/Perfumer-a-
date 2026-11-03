@@ -14,9 +14,9 @@ Revisa primero la cola: una impresión pendiente puede salir al reconectar. **Vo
 
 La página no puede detectar el estado de CatPrinter ni reconectar su enlace Bluetooth directamente. Estos accesos usan los [URI oficiales de Configuración de Windows](https://learn.microsoft.com/en-us/windows/apps/develop/launch/launch-settings). La reconexión física debe comprobarse en el equipo real.
 
-Después de registrar una venta aparece **Imprimir ticket**. Cada venta del historial también permite reimprimir. Todos los tickets incluyen la imagen existente `assets/qr pagina ventas online.png`, centrada y con espacio blanco alrededor. No hay campo de URL ni casilla para quitar el QR.
+Después de registrar una venta aparece **Imprimir ticket**. Cada venta del historial también permite reimprimir. Todos los tickets incluyen el QR local `assets/qr-catalogo-perfumeria.png`, generado para `https://delmaxcorp.github.io/Perfumer-a-/`, centrada y con espacio blanco alrededor. No hay campo de URL ni casilla para quitar el QR.
 
-La impresión espera a que la imagen esté cargada y decodificada. Si falla, muestra un aviso y no abre un ticket sin QR. La ruta se resuelve desde `panel/ticket.js`, conservando el prefijo del proyecto en GitHub Pages. La imagen original no se modifica.
+La impresión espera a que la imagen esté cargada y decodificada. Si falla, muestra un aviso y no abre un ticket sin QR. La ruta se resuelve desde `panel/ticket.js`, conservando el prefijo del proyecto en GitHub Pages. El nuevo QR codifica directamente ese enlace y no requiere servicios externos para imprimirse.
 
 ## Datos y seguridad
 
@@ -29,7 +29,7 @@ No hay consultas de configuración ni cambios de autenticación o de barbería. 
 - `panel/app.js`: impresión tras registrar y desde el historial, sin configuración de URL.
 - `panel/index.html`: controles de impresión simplificados.
 - `panel/ticket.js`: ticket compacto para el papel de 48 × 80 mm de CatPrinter, letra de 9 puntos, total de 11 puntos, imagen QR local y espera de carga.
-- `assets/qr pagina ventas online.png`: imagen existente utilizada sin cambios.
+- `assets/qr-catalogo-perfumeria.png`: nuevo QR del cat?logo, con margen blanco de cuatro m?dulos.
 - `tests/ticket.test.cjs` y `tests/ticket-integration.cjs`: contenido, ruta bajo GitHub Pages, imagen cargada y flujo en Chrome con datos simulados.
 
 ## Probar

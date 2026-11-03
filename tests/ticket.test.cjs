@@ -21,7 +21,7 @@ test('ticket conserva importes, regalos y datos guardados; escapa contenido', ()
 
 test('todos los tickets incluyen la imagen QR local bajo la ruta de GitHub Pages', () => {
   const html = window.AlphaTicket.documento({ id: 9, monto_total: 30 });
-  assert.match(html, /<img src="https:\/\/example.org\/proyecto\/assets\/qr%20pagina%20ventas%20online.png"/);
+  assert.match(html, /<img src="https:\/\/example.org\/proyecto\/assets\/qr-catalogo-perfumeria.png"/);
   assert.match(html, /ESCANEA Y VISITA ALPHA STORE/);
   assert.match(html, /COMPROBANTE INTERNO DE VENTA/);
   assert.doesNotMatch(html, /<svg|store_url/);

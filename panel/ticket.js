@@ -7,7 +7,7 @@
   const numero = valor => valor !== null && valor !== undefined && String(valor).trim() !== '' && Number.isFinite(Number(valor));
   const dinero = valor => numero(valor) ? `S/ ${Number(valor).toFixed(2)}` : 'No registrado';
 
-  const imagenQR = new URL('../assets/qr%20pagina%20ventas%20online.png', document.currentScript.src).href;
+  const imagenQR = new URL('../assets/qr-catalogo-perfumeria.png', document.currentScript.src).href;
 
   function documento(venta) {
     const bloqueQR = '<section class="qr"><strong>ESCANEA Y VISITA ALPHA STORE</strong><img src="' + escapar(imagenQR) + '" alt="QR de Alpha Store"><div>Cat&aacute;logo y pedidos online</div></section>';
@@ -107,7 +107,7 @@
     try {
       await Promise.all(Array.from(destino.document.images, imagen => imagen.decode()));
     } catch {
-      throw new Error('No se pudo cargar la imagen QR del ticket. Revisa que assets/qr pagina ventas online.png esté publicada e intenta nuevamente.');
+      throw new Error('No se pudo cargar la imagen QR del ticket. Revisa que assets/qr-catalogo-perfumeria.png esté publicada e intenta nuevamente.');
     }
     if (destino.document.fonts?.ready) await destino.document.fonts.ready;
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
