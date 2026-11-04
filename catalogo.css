@@ -3,3 +3,22 @@
 .product-image-trigger,.product-name-trigger{display:block;width:100%;min-height:0;margin:0;padding:0;border:0;border-radius:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.product-image-trigger:hover,.product-name-trigger:hover{transform:none;filter:none;background:transparent}.product-image-trigger:focus-visible,.product-name-trigger:focus-visible{outline:3px solid var(--gold-light);outline-offset:-3px}.product-image-trigger .product-image{display:block}.product-name-trigger{font:inherit;font-weight:inherit;line-height:inherit}.product-name{padding:0}
 .decant-prices{margin-top:12px;padding:10px 11px;border-top:1px solid var(--border);border-radius:0 0 8px 8px;background:rgba(2,19,38,.42)}.decant-prices-heading{margin:0 0 5px;color:var(--gold-light);font-size:.8rem;font-weight:700}.decant-price-row{display:inline-block;margin:2px 10px 2px 0;color:var(--ivory);font-size:.82rem;font-weight:650}
 .product-status-out{display:inline-block;width:max-content;margin-top:9px;padding:3px 9px;border:1px solid rgba(217,144,118,.55);border-radius:999px;background:rgba(217,144,118,.16);color:#ffb399;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+
+[hidden] { display: none !important; }
+.decant-toggle { width: 100%; min-height: 46px; margin-top: 12px; padding: 10px; border: 1px solid var(--gold-light); border-radius: 10px; background: var(--gold-light); color: #031a34; font: inherit; font-size: .85rem; font-weight: 750; cursor: pointer; }
+.decant-toggle[aria-expanded="true"] { background: transparent; color: var(--gold-light); }
+.decant-price-row { display: block; padding: 6px 0; margin: 0; border-bottom: 1px solid var(--border); }
+.search-wrap input { min-height: 50px; font-size: 16px; }
+.product-name-trigger { min-height: 44px; }
+@media(max-width:540px) {
+  .catalog-header { padding: 20px 8px; }
+  .catalog-header h1 { font-size: 2rem; }
+  .intro { font-size: .95rem; }
+  .catalog-panel { padding: 14px; }
+  .panel-heading { gap: 12px; }
+  .search-wrap { position: sticky; top: 0; z-index: 5; padding: 10px 0; background: #031a34; }
+  .product-info { padding: 12px; }
+  .product-name { line-height: 1.35; overflow-wrap: anywhere; }
+  .product-price { font-size: .9rem; line-height: 1.5; }
+  .decant-toggle { font-size: .8rem; }
+}

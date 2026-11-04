@@ -12,6 +12,7 @@
   <script defer src="supabaseClient.js"></script>
   <script defer src="store-core.js"></script>
   <script defer src="product-metadata.js"></script>
+  <script defer src="decant-pricing.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -59,7 +60,7 @@
       <form class="filters" id="filters" role="search">
         <div class="search-field"><label for="search">Buscar por nombre o marca</label><div class="input-with-icon"><span aria-hidden="true">⌕</span><input id="search" name="search" type="search" placeholder="Ej. nombre de la fragancia" autocomplete="off"></div></div>
         <div class="filter-field"><label for="category-filter">Categoría</label><select id="category-filter" name="category"><option value="all">Todas</option><option value="arabes">Perfumes árabes</option><option value="disenador">De diseñador</option><option value="sin-clasificar">Por clasificar</option></select></div>
-        <fieldset class="price-filter"><legend>Precio (S/)</legend><label><span>Desde</span><input id="price-min" type="number" min="0" step="1" inputmode="decimal" placeholder="0"></label><label><span>Hasta</span><input id="price-max" type="number" min="0" step="1" inputmode="decimal" placeholder="Sin límite"></label></fieldset>
+        <details class="advanced-filters"><summary>Filtrar por precio</summary><fieldset class="price-filter"><legend>Precio (S/)</legend><label><span>Desde</span><input id="price-min" type="number" min="0" step="1" inputmode="decimal" placeholder="0"></label><label><span>Hasta</span><input id="price-max" type="number" min="0" step="1" inputmode="decimal" placeholder="Sin límite"></label></fieldset></details>
         <button class="button button-quiet reset-filters" id="reset-filters" type="reset">Limpiar filtros</button>
       </form>
       <div class="catalog-status-row"><p id="result-count" aria-live="polite">Cargando colección…</p><p class="data-note">Las categorías no confirmadas aparecen como “Por clasificar”.</p></div>
@@ -86,6 +87,11 @@
     </section>
   </main>
 
+  <nav class="mobile-shortcuts" aria-label="Accesos r?pidos">
+    <a href="#coleccion">Ver perfumes</a>
+    <button type="button" id="mobile-open-bag">Mi carrito <span id="mobile-bag-count">0</span></button>
+    <a href="https://wa.me/51927025595" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+  </nav>
   <footer class="site-footer">
     <a class="brand footer-brand" href="#inicio"><img src="assets/alpha-logo.jpeg" width="52" height="52" alt=""><span><strong>ALPHA</strong><small>PERFUMES Y DECANTS</small></span></a>
     <p>Prototipo para evaluación de experiencia de usuario.</p><p>© <span id="year"></span> ALPHA Perfumería · Ica, Perú</p>

@@ -1431,6 +1431,10 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     function obtenerPrecioSugeridoVenta(perfumeObj, tipoVenta, tamanoDecant) {
       if (!perfumeObj) return 0;
 
+      if (tipoVenta === 'Decant' && tamanoDecant === '30ml') {
+        return window.AlphaDecantPricing.price30ml(perfumeObj.nombre);
+      }
+
       const precioPersonalizado = perfumeObj[`precio_decant_${parseInt(tamanoDecant)}ml`];
       if (tipoVenta === 'Decant' && precioPersonalizado !== null && precioPersonalizado !== undefined && precioPersonalizado !== '') {
         return parseFloat(precioPersonalizado) || 0;

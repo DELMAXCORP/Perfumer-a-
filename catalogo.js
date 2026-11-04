@@ -38,11 +38,11 @@
     button.title = action;
     button.append(content);
     button.addEventListener('click', () => {
-      playProductAudio(product);
+      if (product.audio_url) playProductAudio(product);
       const details = button.closest('.product-card').querySelector('.decant-prices');
       if (!details) return;
       details.hidden = !details.hidden;
-      button.closest('.product-card').querySelectorAll('.product-image-trigger,.product-name-trigger')
+      button.closest('.product-card').querySelectorAll('.product-image-trigger,.product-name-trigger,.decant-toggle')
         .forEach(trigger => trigger.setAttribute('aria-expanded', String(!details.hidden)));
     });
     return button;
@@ -55,6 +55,7 @@
     else if (normalized.includes('VALENTINO INTENSE')) fallback = [30, 45, 80, 240];
     else if (normalized.includes('LIQUID BRUN') || normalized.includes('LIQUID BRUM') || normalized.includes('NIGHT OUT')) fallback = [20, 30, 40, 120];
     return ['3ml', '5ml', '10ml', '30ml'].map((size, index) => {
+      if (size === '30ml') return window.AlphaDecantPricing.price30ml(product.nombre);
       const raw = product[`precio_decant_${size}`];
       const saved = Number(raw);
       return raw !== null && raw !== undefined && raw !== '' && Number.isFinite(saved) ? saved : fallback[index];
@@ -167,7 +168,9 @@
         availability.textContent = 'Perfume sellado agotado';
         info.append(availability);
       }
-      info.append(decantPrices);
+      const toggle = makeAudioButton(product, document.createTextNode('Ver decants y precios'), 'decant-toggle');
+      toggle.setAttribute('aria-expanded', 'false');
+      info.append(toggle, decantPrices);
       card.append(info);
       grid.append(card);
     });

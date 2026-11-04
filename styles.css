@@ -16,6 +16,14 @@
   --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+.mobile-shortcuts { display: none; }
+.advanced-filters { min-width: 0; }
+.advanced-filters summary { padding: 10px 0; cursor: pointer; font-weight: 700; font-size: .85rem; }
+.advanced-filters .price-filter { margin-top: 8px; }
+@media (min-width: 761px) {
+  .advanced-filters { align-self: start; }
+}
+
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 84px; }
 body { margin: 0; color: var(--ink); background: var(--paper); font-family: var(--sans); font-size: 16px; line-height: 1.55; }
@@ -299,4 +307,62 @@ dialog::backdrop { background: rgba(4, 12, 24, .66); backdrop-filter: blur(3px);
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* Navegaci?n y compra con una mano en m?vil. */
+@media (max-width: 760px) {
+  html { scroll-padding-top: 118px; }
+  body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .site-header { position: sticky; top: 0; }
+  .header-inner { min-height: 62px; }
+  .main-nav { gap: 24px; }
+  .main-nav a { min-height: 40px; display: inline-flex; align-items: center; }
+  .hero { min-height: auto; padding: 30px 20px; gap: 22px; }
+  .hero h1 { font-size: clamp(2rem, 8.5vw, 3.1rem); }
+  .hero-lead { margin-top: 15px; font-size: 1rem; }
+  .hero-actions { margin-top: 20px; gap: 16px; }
+  .hero-actions .button { width: 100%; }
+  .hero-showcase { display: none; }
+  .gift-banner { padding: 18px; gap: 12px; font-size: .88rem; }
+  .gift-icon { width: 36px; height: 36px; flex-basis: 36px; }
+  .catalog-section { padding: 36px 0; }
+  .section-heading h2 { font-size: 2rem; }
+  .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 18px; border-radius: 18px; background: #f7f3eb; }
+  .search-field, .filter-field { grid-column: 1 / -1; }
+  .filters input, .filters select, .customer-form input, .customer-form select { min-height: 48px; font-size: 16px; width: 100%; }
+  .advanced-filters { grid-column: 1 / -1; }
+  .advanced-filters summary { min-height: 44px; }
+  .advanced-filters .price-filter { display: flex; gap: 12px; }
+  .price-filter label { min-width: 0; flex: 1; }
+  .reset-filters { grid-column: 1 / -1; width: 100%; }
+  .catalog-status-row { align-items: start; }
+  .data-note { display: none; }
+  .product-grid { gap: 10px; }
+  .product-card { border-radius: 14px; }
+  .product-card .button { min-height: 44px; padding: 10px; }
+  .mobile-shortcuts { position: fixed; inset: auto 0 0; z-index: 60; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); background: #fffdf9; border-top: 1px solid var(--line); box-shadow: 0 -4px 24px #0b1c3310; }
+  .mobile-shortcuts a, .mobile-shortcuts button { display: flex; gap: 6px; justify-content: center; align-items: center; min-height: 46px; padding: 8px 4px; border: 0; border-radius: 12px; background: var(--cream); color: var(--navy); text-decoration: none; font-size: .8rem; font-weight: 800; }
+  .mobile-shortcuts button { background: var(--navy); color: white; cursor: pointer; }
+  .mobile-shortcuts a:last-child { color: #176545; }
+  .toast { bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .bag-dialog[open] { display: flex; flex-direction: column; }
+  .bag-header { flex: 0 0 auto; min-height: 76px; }
+  .bag-body { flex: 1 1 auto; height: auto; min-height: 80px; }
+  .bag-summary { flex: 0 0 auto; height: auto; max-height: 58dvh; overflow-y: auto; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+  .bag-item-controls .quantity-control { grid-template-columns: 44px 34px 44px; }
+  .bag-item-controls .quantity-control button, .bag-item-controls .quantity-control span { min-height: 44px; }
+  .remove-item, .decant-add, .decant-consult { min-height: 44px; }
+  .detail-media { min-height: 230px; padding: 25px; }
+  .detail-media img { max-height: 240px; }
+  .detail-copy { padding: 24px 18px; }
+  .decant-row { padding: 8px; gap: 8px; }
+  .customer-dialog { max-height: calc(100dvh - 24px); }
+  .customer-actions { grid-template-columns: 1fr; }
+}
+@media (max-width: 359px) {
+  .product-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

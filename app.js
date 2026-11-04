@@ -174,7 +174,9 @@
       const referenceImage = fragrance.rows.map(item => safeImageUrl(item.imagen_url)).find(Boolean) || '';
       DECANT_SIZES.forEach(([size, field]) => {
         const stored = fragrance.rows.map(item => numericPrice(item[field])).find(value => value !== null);
-        const price = stored ?? defaultDecantPrice(fragrance.name, size);
+        const price = size === '30 ml'
+          ? window.AlphaDecantPricing.price30ml(fragrance.name)
+          : stored ?? defaultDecantPrice(fragrance.name, size);
         if (price === null) return;
         products.push({
           id: `decant|${fragranceKey}|${size}`,
@@ -684,6 +686,11 @@
     }
   }
 
+  document.getElementById('mobile-open-bag').addEventListener('click', () => document.getElementById('open-bag').click());
+  const mobileCount = document.getElementById('mobile-bag-count');
+  new MutationObserver(() => { mobileCount.textContent = elements.bagCount.textContent; })
+    .observe(elements.bagCount, { childList: true, characterData: true, subtree: true });
+  elements.filters.addEventListener('submit', event => event.preventDefault());
   elements.filters.addEventListener('input', renderCatalog);
   elements.filters.addEventListener('change', renderCatalog);
   elements.filters.addEventListener('reset', () => window.setTimeout(renderCatalog, 0));
