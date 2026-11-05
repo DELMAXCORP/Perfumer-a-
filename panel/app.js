@@ -1,6 +1,7 @@
 const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptdnV1ZWl6cmVocWliampjYmdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3NTY0MDMsImV4cCI6MjEwNTMzMjQwM30.HVgy61_hS7ecm7sHMz2h5mKtb7r1LXesIjfoH5lZG8M';
     const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { fetch: AlphaData.instrumentFetch() },
       auth: {
         persistSession: true,
         autoRefreshToken: true,
@@ -21,6 +22,95 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     const BORRADORES_STORE = 'borradores_venta';
     const IMAGENES_CATALOGO_BUCKET = 'catalogo-imagenes';
     let edicionImagenProducto = null;
+
+
+    const datos = AlphaData;
+    const PRODUCTOS_COLUMNAS = 'id,nombre,tipo,tamano,precio,precio_sugerido,precio_decant_3ml,precio_decant_5ml,precio_decant_10ml,precio_decant_30ml,stock,ml_restantes,ubicacion_stock,imagen_url,audio_url';
+    const VENTAS_COLUMNAS = 'id,fecha,producto_nombre,tipo_venta,monto_total,ganancia_neta,vendedor_email,ubicacion_venta,detalles,notas';
+    const MOVIMIENTOS_COLUMNAS = 'id,fecha,producto_id,producto_nombre,producto_tipo,producto_tamano,tipo_movimiento,cantidad,ubicacion_origen,ubicacion_destino,costo_unitario,costo_total,registrado_por';
+    const CIERRES_COLUMNAS = 'fecha,ubicacion,contenido,inventario,actualizado_por,actualizado_en';
+    const ASISTENCIA_COLUMNAS = 'id,vendedor_email,fecha_ingreso,fecha_salida,horas_trabajadas';
+    const CONTACTOS_COLUMNAS = 'id,created_at,nombre,telefono,forma_entrega,estado,pedido_resumen';
+    let tabActual = 'venta';
+    let historialRevision = 0;
+    let cierreRevision = 0;
+    let comprobanteRevision = 0;
+    let sesionPendienteDeLimpiar = false;
+    const firmas = new datos.ReadCache();
+    const cargas = new Map();
+    async function leerLista(clave, factory, ttl = 60000) {
+      const epoch = datos.privateCache.epoch;
+      return datos.privateCache.read(clave, () => datos.all(factory, 500, () => epoch === datos.privateCache.epoch), ttl);
+    }
+    async function lecturaParcial(promise) {
+      try { return { data: await promise }; }
+      catch (error) { if (error instanceof datos.StaleRead) throw error; return { error }; }
+    }
+    function protegerCarga(nombre, fn) {
+      return function (...args) {
+        const clave = nombre + ':' + datos.privateCache.epoch + ':' +
+          ['fechaReporteDesde','fechaReporteHasta','fechaCierreInventario'].map(id => document.getElementById(id)?.value || '').join('|');
+        if (cargas.has(clave)) return cargas.get(clave);
+        const promise = Promise.resolve().then(() => fn(...args)).catch(error => {
+          if (!(error instanceof datos.StaleRead)) mostrarAviso(error.message || datos.message(error), 'error');
+        }).finally(() => { if (cargas.get(clave) === promise) cargas.delete(clave); });
+        cargas.set(clave, promise); return promise;
+      };
+    }
+    function limpiarDatosPrivados() {
+      datos.privateCache.setScope(''); datos.privateCache.clear(); firmas.clear(); cargas.clear();
+      historialRevision++; cierreRevision++; comprobanteRevision++;
+      listaProductos = []; listaVentasCache = []; listaAsistenciaCache = []; cierresInventarioCache = [];
+      notasCierreCache = {}; carritoVenta = []; comprobanteBase64 = null; registroAsistenciaActivo = null;
+      ultimaVentaTicket = null; ultimoTicketImpresion = null;
+      if (intervalTimer) clearInterval(intervalTimer);
+      for (const id of ['listaVentas','listaAsistencia','tablaContactos','gridInventario','cierresInventarioPorUbicacion','eventosInventarioCierre','itemPerfume','statsContactos','resumenMasVendidos','contenidoDetalleInventario']) {
+        const element = document.getElementById(id);
+        element?.replaceChildren();
+        if (element?.dataset) delete element.dataset.alphaHtml;
+      }
+      document.getElementById('modalImgComprobante').src = '';
+      document.getElementById('modalComprobante').classList.add('hidden');
+      document.getElementById('imgComprobantePreview').src = '';
+      document.getElementById('prevImg').src = '';
+      for (const id of ['vtaNotas','vtaFotoComprobante']) document.getElementById(id).value = '';
+      for (const id of ['metrTotal','metrBajo','metrAgotado']) document.getElementById(id).textContent = '0';
+      document.getElementById('previewComprobanteContainer').classList.add('hidden');
+      gruposAbiertosInventario = []; perfumesRegaloFiltrados = [];
+      edicionImagenProducto = null;
+      for (const id of ['modalDetalleInventario','modalTrasladoStock','modalImagenProducto','modalRegaloPerfume']) document.getElementById(id)?.classList.add('hidden');
+      avisoMetaVentasFecha = null; avisoJornadaMostradoId = null;
+      renderizarCarrito();
+      miGraficoVentas?.destroy(); miGraficoVentas = null;
+      miGraficoVendedores?.destroy(); miGraficoVendedores = null;
+    }
+    window.addEventListener('alpha:service-error', event => {
+      mostrarAviso(datos.message(event.detail), 'error');
+      if (event.detail.status === 401 && usuarioActual) {
+        if (procesandoVenta) sesionPendienteDeLimpiar = true;
+        else { limpiarDatosPrivados(); usuarioActual = null; }
+        document.getElementById('sec-app').classList.add('hidden');
+        document.getElementById('sec-login').classList.remove('hidden');
+      }
+    });
+    async function leerVentas(desde, hasta) {
+      const clave = 'ventas:' + desde + ':' + hasta;
+      const epoch = datos.privateCache.epoch;
+      const [ventas, conCaptura] = await Promise.all([
+        leerLista(clave, () => datos.dates(client.from('ventas').select(VENTAS_COLUMNAS), 'fecha', desde, hasta).order('fecha', { ascending: false }).order('id', { ascending: false })),
+        leerLista(clave + ':capturas', () => datos.dates(client.from('ventas').select('id').not('comprobante_url', 'is', null).neq('comprobante_url', ''), 'fecha', desde, hasta).order('id'))
+      ]);
+      if (epoch !== datos.privateCache.epoch) throw new datos.StaleRead();
+      const ids = new Set(conCaptura.map(v => String(v.id)));
+      return ventas.map(v => ({ ...v, tiene_comprobante: ids.has(String(v.id)) }));
+    }
+    async function actualizarVistaActual() {
+      if (!usuarioActual || procesandoVenta) return;
+      datos.privateCache.clear();
+      if (tabActual === 'asistencia') await cargarEstadoAsistencia();
+      else if (tabActual === 'contactos') await cargarContactosMarketing();
+      else await cargarTodo();
+    }
 
     const ADMIN_EMAILS = ['diego@alpha.com', 'luis@alpha.com', 'mau@alpha.com'];
 
@@ -176,11 +266,13 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       inicio.setHours(0, 0, 0, 0);
       const fin = new Date(inicio);
       fin.setDate(fin.getDate() + 1);
-      const { data, error } = await client.from('ventas').select('monto_total')
-        .gte('fecha', inicio.toISOString()).lt('fecha', fin.toISOString());
-      if (error) {
-        console.warn('No se pudo comprobar la meta diaria de ventas:', error.message);
-        return;
+      let data;
+      try {
+        data = await leerLista('meta:' + hoy, () => client.from('ventas').select('id,monto_total')
+          .gte('fecha', inicio.toISOString()).lt('fecha', fin.toISOString()).order('id'));
+      } catch (_) {
+        // The optional announcement must never interrupt cleanup of a saved sale.
+        console.warn('No se pudo comprobar la meta diaria de ventas.'); return;
       }
       const totalDia = (data || []).reduce((suma, venta) => suma + Number(venta.monto_total || 0), 0);
       if (totalDia < obtenerMetaDiaria(hoy)) return;
@@ -209,7 +301,12 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     });
 
     client.auth.onAuthStateChange((event, session) => {
+      if (session?.user && usuarioActual && session.user.id !== usuarioActual.id) {
+        limpiarDatosPrivados(); usuarioActual = session.user;
+        setTimeout(() => { void iniciarApp(); }, 0);
+      }
       if (event === 'SIGNED_OUT') {
+        limpiarDatosPrivados();
         usuarioActual = null;
         ultimaVentaTicket = null;
         ultimoTicketImpresion = null;
@@ -267,6 +364,16 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
 
     async function iniciarApp() {
+      const scope = usuarioActual.id || usuarioActual.email;
+      if (datos.privateCache.scope !== scope) { limpiarDatosPrivados(); datos.privateCache.setScope(scope); firmas.setScope(scope); }
+      tabActual = 'venta';
+      for (const tab of ['venta','stock','cierre','historial','asistencia','contactos']) {
+        document.getElementById('tab-' + tab).classList.toggle('hidden', tab !== 'venta');
+        const button = document.querySelector('.nav-tabs [data-tab="' + tab + '"]');
+        if (tab === 'venta') button?.setAttribute('aria-current', 'page');
+        else button?.removeAttribute('aria-current');
+      }
+      const epochInicio = datos.privateCache.epoch;
       document.getElementById('sec-login').classList.add('hidden');
       document.getElementById('sec-app').classList.remove('hidden');
       document.getElementById('userLogged').innerText = `Usuario: ${usuarioActual.email} ${esAdmin() ? ' (ADMIN)' : ''}`;
@@ -286,8 +393,10 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       }
 
       await restaurarBorradorVenta();
+      if (epochInicio !== datos.privateCache.epoch || !usuarioActual) return;
       renderizarCarrito();
-      cargarTodo();
+      await cargarTodo();
+      await cargarEstadoAsistencia();
     }
 
     async function cerrarSesion() {
@@ -309,6 +418,9 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     function mostrarTab(tab) {
       const secciones = ['venta', 'stock', 'cierre', 'historial', 'asistencia', 'contactos'];
       if (!secciones.includes(tab)) return;
+      tabActual = tab;
+      if (tab === 'historial') cargarHistorial();
+      if (tab === 'stock' || tab === 'venta') cargarProductos();
       secciones.forEach(t => {
         document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
         const boton = document.querySelector('.nav-tabs [data-tab="' + t + '"]');
@@ -323,8 +435,8 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
    
 
-    async function cargarTodo() {
-      const { data: prods } = await client.from('productos').select('*').order('id', { ascending: false });
+    async function cargarProductos() {
+      const prods = await leerLista('productos', () => client.from('productos').select(PRODUCTOS_COLUMNAS).order('id', { ascending: false }));
       listaProductos = prods || [];
       carritoVenta.forEach(item => {
         if (item.tipo === 'Decant') {
@@ -335,9 +447,11 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       renderizarStock();
       actualizarOpcionesVenta();
       renderizarCarrito();
-      cargarHistorial();
-      cargarCierreInventario();
-      cargarEstadoAsistencia();
+    }
+    async function cargarTodo() {
+      await cargarProductos();
+      if (tabActual === 'historial') await cargarHistorial();
+      if (tabActual === 'cierre') await cargarCierreInventario();
     }
 
     function fechaLocalISO(fecha = new Date()) {
@@ -348,26 +462,31 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       const campoFecha = document.getElementById('fechaCierreInventario');
       if (!campoFecha || !usuarioActual) return;
       if (!campoFecha.value) campoFecha.value = fechaLocalISO();
-      const { data, error } = await client.from('cierres_inventario_ubicaciones').select('*').eq('fecha', campoFecha.value);
+      const revision = ++cierreRevision;
+      const fecha = campoFecha.value;
+      const data = await leerLista('cierre:' + fecha, () => client.from('cierres_inventario_ubicaciones').select(CIERRES_COLUMNAS).eq('fecha', fecha).order('ubicacion'));
+      const error = null;
+      if (revision !== cierreRevision || campoFecha.value !== fecha) return;
       if (error) {
         document.getElementById('estadoCierreInventario').innerText = 'Ejecuta database/cierres-inventario.sql para activar el cierre diario.';
         return;
       }
       cierresInventarioCache = data || [];
       document.getElementById('estadoCierreInventario').innerText = cierresInventarioCache.length ? `${cierresInventarioCache.length} de ${UBICACIONES_INVENTARIO.length} ubicaciones tienen cierre guardado.` : 'Aún no hay cierres guardados para este día.';
-      await renderizarDetalleCierreInventario(campoFecha.value, cierresInventarioCache);
+      await renderizarDetalleCierreInventario(fecha, cierresInventarioCache, revision);
     }
 
-    async function renderizarDetalleCierreInventario(fecha, cierres = []) {
-      const inicio = new Date(`${fecha}T00:00:00`);
+    async function renderizarDetalleCierreInventario(fecha, cierres = [], revision = cierreRevision) {
+      const inicio = new Date(`${fecha}T00:00:00-05:00`);
       const fin = new Date(inicio.getTime() + 24 * 60 * 60 * 1000 - 1);
       const desde = inicio.toISOString();
       const hasta = fin.toISOString();
       const [respuestaProductos, respuestaVentas, respuestaMovimientos] = await Promise.all([
-        client.from('productos').select('id,nombre,tipo,tamano,stock,ubicacion_stock,imagen_url').eq('tipo', 'Perfume Sellado').order('nombre'),
-        client.from('ventas').select('fecha,ubicacion_venta,detalles').gte('fecha', desde).lte('fecha', hasta),
-        client.from('inventario_movimientos').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha')
+        lecturaParcial(leerLista('cierre-productos', () => client.from('productos').select('id,nombre,tipo,tamano,stock,ubicacion_stock,imagen_url').eq('tipo', 'Perfume Sellado').order('nombre').order('id'))),
+        lecturaParcial(leerLista('cierre-ventas:' + fecha, () => client.from('ventas').select('id,fecha,ubicacion_venta,detalles').gte('fecha', desde).lte('fecha', hasta).order('id'))),
+        lecturaParcial(leerLista('cierre-movimientos:' + fecha, () => client.from('inventario_movimientos').select(MOVIMIENTOS_COLUMNAS).gte('fecha', desde).lte('fecha', hasta).order('fecha').order('id')))
       ]);
+      if (revision !== cierreRevision || document.getElementById('fechaCierreInventario').value !== fecha) return;
       const contStock = document.getElementById('cierresInventarioPorUbicacion');
       const contEventos = document.getElementById('eventosInventarioCierre');
       const eventos = [];
@@ -401,7 +520,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
             const clave = `${normalizarTexto(p.nombre).trim()}|${normalizarTexto(p.tamano || '').trim()}`;
             const actividad = movimientosPorPerfume.get(clave) || [];
             const estado = actividad.length ? actividad.map(texto => `<small class="cierre-perfume-actividad">${escaparHTML(texto)}</small>`).join('') : '';
-            return `<div class="cierre-perfume-row"><img src="${escaparHTML(p.imagen_url || IMG_DEFAULT)}" alt="${escaparHTML(p.nombre || 'Perfume')}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'"><div class="cierre-perfume-nombre"><strong>${escaparHTML(p.nombre || 'Perfume')}</strong><small>${escaparHTML(p.tamano || '')}</small>${estado}</div><label>Cantidad<input type="number" min="0" step="1" inputmode="numeric" data-cierre-producto="${escaparHTML(String(p.id))}" value="${Number(p.cantidad ?? p.stock) || 0}" aria-label="Cantidad de ${escaparHTML(p.nombre || 'perfume')} en ${escaparHTML(ubicacion)}"></label></div>`;
+            return `<div class="cierre-perfume-row"><img width="68" height="68" src="${escaparHTML(datos.thumbnail(p.imagen_url) || IMG_DEFAULT)}" alt="${escaparHTML(p.nombre || 'Perfume')}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'"><div class="cierre-perfume-nombre"><strong>${escaparHTML(p.nombre || 'Perfume')}</strong><small>${escaparHTML(p.tamano || '')}</small>${estado}</div><label>Cantidad<input type="number" min="0" step="1" inputmode="numeric" data-cierre-producto="${escaparHTML(String(p.id))}" value="${Number(p.cantidad ?? p.stock) || 0}" aria-label="Cantidad de ${escaparHTML(p.nombre || 'perfume')} en ${escaparHTML(ubicacion)}"></label></div>`;
           }).join('') : '<p class="cierre-sin-stock">No hay perfumes sellados con stock en esta ubicación.</p>';
           return `<section class="chart-container"><h4 style="margin-top:0;">${['🏬','🚐','💈'][index]} Cierre de ${escaparHTML(ubicacion)} ${cierre ? `<small>· Guardado ${new Date(cierre.actualizado_en).toLocaleString('es-PE')}</small>` : '<small>· Pendiente</small>'}</h4><div>${itemsHtml}</div><label for="cierreNota-${index}">Observaciones de ${escaparHTML(ubicacion)}</label><textarea id="cierreNota-${index}" rows="2" placeholder="Conteo y observaciones">${escaparHTML(cierre?.contenido || '')}</textarea><button type="button" class="btn-add" style="margin-top:8px;" onclick="guardarCierreInventarioUbicacion('${ubicacion}',${index})">💾 Guardar cierre de ${escaparHTML(ubicacion)}</button></section>`;
         }).join('');
@@ -430,7 +549,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       if (inventario.some(item => !Number.isInteger(Number(item.cantidad)) || Number(item.cantidad) < 0)) return alert('Las cantidades deben ser números enteros iguales o mayores que cero.');
       const contenido = document.getElementById(`cierreNota-${indice}`).value.trim();
       const fila = { fecha, ubicacion, contenido, inventario, actualizado_por: usuarioActual.email, actualizado_en: new Date().toISOString() };
-      const { data, error } = await client.from('cierres_inventario_ubicaciones').upsert(fila, { onConflict: 'fecha,ubicacion' }).select('*').single();
+      const { data, error } = await client.from('cierres_inventario_ubicaciones').upsert(fila, { onConflict: 'fecha,ubicacion' }).select(CIERRES_COLUMNAS).single();
       if (error) return alert('No se pudo guardar el cierre. Ejecuta database/cierres-inventario.sql actualizado. ' + error.message);
       cierresInventarioCache = [data, ...cierresInventarioCache.filter(item => !(item.fecha === fecha && item.ubicacion === ubicacion))];
       document.getElementById('estadoCierreInventario').innerText = `Cierre de ${ubicacion} guardado por ${usuarioActual.email} el ${new Date(data.actualizado_en).toLocaleString('es-PE')}.`;
@@ -642,18 +761,19 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       });
       const contGrid = document.getElementById('gridInventario');
       if (!filtrados.length) {
+        delete contGrid.dataset.alphaHtml;
         contGrid.innerHTML = '<p class="empty-msg" style="grid-column: 1/-1; text-align:center; padding:20px;">No se encontraron productos en esta categoría.</p>';
         return;
       }
 
       gruposAbiertosInventario = [];
-      contGrid.innerHTML = filtrados.map(p => {
+      const stockHTML = filtrados.map(p => {
         if (p.esGrupoAbierto || p.tipo === 'Perfume Sellado') {
           const grupoIdx = gruposAbiertosInventario.push(p) - 1;
           const agotado = p.stock <= 0;
           return `
             <button type="button" class="product-card inventory-product" onclick="abrirModalInventario('grupo', ${grupoIdx})" aria-label="Ver ${p.nombre} y administrar inventario">
-              <img class="inventory-card-image" src="${p.imagen_url || IMG_DEFAULT}" alt="${p.nombre}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'">
+              <img width="360" height="360" class="inventory-card-image" src="${datos.thumbnail(p.imagen_url) || IMG_DEFAULT}" alt="${p.nombre}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'">
               <span class="inventory-card-info">
                 <strong class="inventory-card-name">${p.nombre}</strong>
                 <span class="inventory-card-type">${p.esGrupoAbierto ? `Abierto · ${p.tamano}` : `Sellado · ${p.tamano}`}</span>
@@ -691,7 +811,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
 
         return `
           <button type="button" class="product-card inventory-product" onclick="abrirModalInventario('producto', ${p.id})" aria-label="Ver ${p.nombre} y administrar inventario">
-            <img class="inventory-card-image" src="${p.imagen_url || IMG_DEFAULT}" alt="${p.nombre}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'">
+            <img width="360" height="360" class="inventory-card-image" src="${datos.thumbnail(p.imagen_url) || IMG_DEFAULT}" alt="${p.nombre}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'">
             <span class="inventory-card-info">
               <strong class="inventory-card-name">${p.nombre}</strong>
               <span class="inventory-card-type">${labelTipo}</span>
@@ -701,6 +821,10 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
           </button>
         `;
       }).join('');
+      if (contGrid.dataset.alphaHtml !== stockHTML) {
+        contGrid.innerHTML = stockHTML;
+        contGrid.dataset.alphaHtml = stockHTML;
+      }
     }
 
     let grupoTrasladoActual = null;
@@ -1270,19 +1394,24 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       controles.forEach(id => { document.getElementById(id).disabled = true; });
       const estado = document.getElementById('estadoImagenProducto');
       estado.textContent = 'Guardando imagen…';
-      const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[edicion.archivo.type];
-      const ruta = `${usuarioActual.id}/${crypto.randomUUID()}.${extension}`;
+      const base = `${usuarioActual.id}/${crypto.randomUUID()}`;
+      const ruta = base + '.full.jpg';
+      const rutaMiniatura = base + '.thumb.jpg';
       const storage = client.storage.from(IMAGENES_CATALOGO_BUCKET);
       let imagenGuardada = false;
       try {
-        const { error: errorSubida } = await storage.upload(ruta, edicion.archivo, {
-          contentType: edicion.archivo.type, cacheControl: '3600', upsert: false
+        const variantes = await datos.imageVariants(edicion.archivo);
+        const { error: errorMiniatura } = await storage.upload(rutaMiniatura, variantes.thumb, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false });
+        if (errorMiniatura) throw new Error('No se pudo subir la miniatura.');
+        const { error: errorSubida } = await storage.upload(ruta, variantes.full, {
+          contentType: 'image/jpeg', cacheControl: '31536000', upsert: false
         });
+        if (errorSubida) await storage.remove([rutaMiniatura]);
         if (errorSubida) throw new Error('No se pudo subir la imagen: ' + errorSubida.message);
         const imagenUrl = storage.getPublicUrl(ruta).data.publicUrl;
         const { data, error } = await client.from('productos').update({ imagen_url: imagenUrl }).in('id', edicion.ids).select('id');
         if (error || !data?.length) {
-          const { error: errorLimpieza } = await storage.remove([ruta]);
+          const { error: errorLimpieza } = await storage.remove([ruta, rutaMiniatura]);
           if (errorLimpieza) console.warn('No se pudo retirar la imagen sin asociar:', errorLimpieza);
           throw new Error('No se pudo asociar la imagen al perfume: ' + (error?.message || 'revisa tus permisos de edición.'));
         }
@@ -1603,6 +1732,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
 
     async function restaurarBorradorVenta() {
       if (!usuarioActual) return;
+      const epoch = datos.privateCache.epoch;
       try {
         const db = await abrirBaseDatosBorradores();
         const borrador = await new Promise((resolve, reject) => {
@@ -1612,7 +1742,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
           request.onerror = () => reject(request.error);
         });
         db.close();
-        if (!borrador) return;
+        if (!borrador || epoch !== datos.privateCache.epoch || !usuarioActual) return;
 
         carritoVenta = Array.isArray(borrador.carritoVenta) ? borrador.carritoVenta : [];
         comprobanteBase64 = borrador.comprobanteBase64 || null;
@@ -1662,9 +1792,11 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       if (!valor) return null;
       // Compatibilidad con ventas antiguas que guardaron la imagen como Base64.
       if (valor.startsWith('data:image/')) return valor;
-      const { data, error } = await client.storage.from(COMPROBANTES_BUCKET).createSignedUrl(valor, 300);
-      if (error) throw new Error(`No se pudo abrir el comprobante: ${error.message}`);
-      return data.signedUrl;
+      return firmas.read(valor, async () => {
+        const { data, error } = await client.storage.from(COMPROBANTES_BUCKET).createSignedUrl(valor, 300);
+        if (error) throw new Error(datos.message(error));
+        return data.signedUrl;
+      }, 240000);
     }
 
     function agregarAlCarrito() {
@@ -1942,7 +2074,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         return `
           <div class="cart-item">
             <div style="display:flex; align-items:center; gap:10px;">
-              <img src="${item.imagen_url || IMG_DEFAULT}" style="width:36px; height:36px; object-fit:cover; border-radius:5px; border:1px solid var(--border);" onerror="this.src='${IMG_DEFAULT}'">
+              <img width="36" height="36" src="${datos.thumbnail(item.imagen_url) || IMG_DEFAULT}" style="width:36px; height:36px; object-fit:cover; border-radius:5px; border:1px solid var(--border);" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'">
               <div>
                 <strong>${item.cantidad}x ${item.nombre}</strong> <span class="badge ${item.es_regalo ? 'badge-gift' : ''}">${item.es_regalo ? '🎁 GRATIS' : `${item.tipo} - ${item.tamano}`}</span><br>
                 <span style="color:var(--muted); font-size:0.75rem;">Cobrado: S/ ${item.precio_unitario.toFixed(2)} | Costo Estimado: S/ ${item.costo_unitario.toFixed(2)}</span>
@@ -2155,7 +2287,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
           notas: notasTexto || null
         };
 
-        const { data: ventaRegistrada, error } = await client.from('ventas').insert([venta]).select('*').single();
+        const { data: ventaRegistrada, error } = await client.from('ventas').insert([venta]).select(VENTAS_COLUMNAS).single();
         if (error) {
           await restaurarReservaStock(reservaStock);
           reservaStock = [];
@@ -2202,6 +2334,9 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         alert('Ocurrió un error inesperado al procesar la venta: ' + err.message);
       } finally {
         procesandoVenta = false;
+        if (sesionPendienteDeLimpiar) {
+          sesionPendienteDeLimpiar = false; limpiarDatosPrivados(); usuarioActual = null;
+        }
         btnSubmit.disabled = false;
         btnSubmit.innerText = '✅ Procesar Venta Completa';
       }
@@ -2237,8 +2372,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
 
     async function cargarHistorial() {
-      const { data: ventasCargadas } = await client.from('ventas').select('*').order('fecha', { ascending: false });
-      listaVentasCache = ventasCargadas || [];
+      const revision = ++historialRevision;
       const fechaDesde = document.getElementById('fechaReporteDesde').value;
       const fechaHasta = document.getElementById('fechaReporteHasta').value;
       if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
@@ -2247,8 +2381,15 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         actualizarGraficoVendedores();
         return;
       }
-      const { data: notasCierre, error: errorNotasCierre } = await client.from('cierres_caja_notas')
-        .select('fecha,nota').order('fecha', { ascending: false });
+      const epoch = datos.privateCache.epoch;
+      const [ventasCargadas, respuestaNotas] = await Promise.all([
+        leerVentas(fechaDesde, fechaHasta),
+        lecturaParcial(leerLista('notas:' + fechaDesde + ':' + fechaHasta, () => datos.dates(client.from('cierres_caja_notas').select('fecha,nota'), 'fecha', fechaDesde, fechaHasta, true).order('fecha', { ascending: false })))
+      ]);
+      if (revision !== historialRevision || epoch !== datos.privateCache.epoch || fechaDesde !== document.getElementById('fechaReporteDesde').value || fechaHasta !== document.getElementById('fechaReporteHasta').value) return;
+      listaVentasCache = ventasCargadas;
+      const notasCierre = respuestaNotas.data;
+      const errorNotasCierre = respuestaNotas.error;
       if (errorNotasCierre) {
         notasCierreCache = {};
         console.warn('No se pudieron cargar las notas de cierre de caja:', errorNotasCierre.message);
@@ -2257,7 +2398,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       }
       const ventas = listaVentasCache.filter(v => {
         const fecha = new Date(v.fecha);
-        const clave = fecha.getFullYear() + '-' + String(fecha.getMonth() + 1).padStart(2, '0') + '-' + String(fecha.getDate()).padStart(2, '0');
+        const clave = datos.dayInLima(fecha);
         return (!fechaDesde || clave >= fechaDesde) && (!fechaHasta || clave <= fechaHasta);
       });
 
@@ -2288,7 +2429,8 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
 
       let catalogo = listaProductos;
       if (!catalogo || !catalogo.length) {
-        const { data: prods } = await client.from('productos').select('*');
+        const prods = await leerLista('productos', () => client.from('productos').select(PRODUCTOS_COLUMNAS).order('id', { ascending: false }));
+        if (revision !== historialRevision) return;
         catalogo = prods || [];
         listaProductos = catalogo;
       }
@@ -2298,15 +2440,12 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       
       ventas.forEach((v, index) => {
         const fechaObj = new Date(v.fecha);
-        const ano = fechaObj.getFullYear();
-        const mes = String(fechaObj.getMonth() + 1).padStart(2, '0');
-        const dia = String(fechaObj.getDate()).padStart(2, '0');
-        const claveFechaLocal = `${ano}-${mes}-${dia}`;
+        const claveFechaLocal = datos.dayInLima(fechaObj);
 
         if (!grupos[claveFechaLocal]) {
           grupos[claveFechaLocal] = {
-            fechaFormateada: fechaObj.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
-            etiquetaCorta: fechaObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+            fechaFormateada: fechaObj.toLocaleDateString('es-ES', { timeZone: 'America/Lima', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+            etiquetaCorta: fechaObj.toLocaleDateString('es-ES', { timeZone: 'America/Lima', day: '2-digit', month: 'short' }),
             ventas: [],
             totalGanado: 0,
             gananciaNetaTotal: 0
@@ -2426,7 +2565,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
             ? lineasDetalle.reduce((total, linea) => total + linea.costoLinea, 0)
             : Number(v.monto_total || 0) - item.gananciaNetaCalculada;
           const desgloseHTML = lineasDetalle.length
-            ? lineasDetalle.map(linea => `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);"><img src="${escaparHTML(linea.imagen)}" alt="${escaparHTML(linea.nombre)}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'" style="width:68px;height:68px;object-fit:cover;border-radius:9px;border:1px solid var(--border);flex:0 0 auto;"><div style="min-width:0;"><strong>${linea.cantidad}× ${escaparHTML(linea.nombre)}</strong>${linea.esDecant ? `<div style="display:inline-block;margin:4px 0;padding:4px 9px;border-radius:5px;background:var(--gold-light);color:#16202b;font-size:.88rem;font-weight:900;letter-spacing:.05em;">DECANT ${escaparHTML(linea.tipo.replace(/^Decant\s*/i, ''))}</div>` : `<div style="font-size:.75rem;color:var(--muted);">${escaparHTML(linea.tipo)}</div>`}<div style="font-size:.76rem;margin-top:4px;">Cobrado: S/ ${linea.cobrado.toFixed(2)}${esUsuarioAdmin ? ` · Costo producto: S/ ${linea.costoProducto.toFixed(2)}${linea.costoEnvase ? ` · Envase: S/ ${linea.costoEnvase.toFixed(2)}` : ''} · Costo total: S/ ${linea.costoLinea.toFixed(2)}` : ''}</div></div></div>`).join('')
+            ? lineasDetalle.map(linea => `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);"><img width="68" height="68" src="${escaparHTML(datos.thumbnail(linea.imagen))}" alt="${escaparHTML(linea.nombre)}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'" style="width:68px;height:68px;object-fit:cover;border-radius:9px;border:1px solid var(--border);flex:0 0 auto;"><div style="min-width:0;"><strong>${linea.cantidad}× ${escaparHTML(linea.nombre)}</strong>${linea.esDecant ? `<div style="display:inline-block;margin:4px 0;padding:4px 9px;border-radius:5px;background:var(--gold-light);color:#16202b;font-size:.88rem;font-weight:900;letter-spacing:.05em;">DECANT ${escaparHTML(linea.tipo.replace(/^Decant\s*/i, ''))}</div>` : `<div style="font-size:.75rem;color:var(--muted);">${escaparHTML(linea.tipo)}</div>`}<div style="font-size:.76rem;margin-top:4px;">Cobrado: S/ ${linea.cobrado.toFixed(2)}${esUsuarioAdmin ? ` · Costo producto: S/ ${linea.costoProducto.toFixed(2)}${linea.costoEnvase ? ` · Envase: S/ ${linea.costoEnvase.toFixed(2)}` : ''} · Costo total: S/ ${linea.costoLinea.toFixed(2)}` : ''}</div></div></div>`).join('')
             : '<p style="margin:0;font-size:.78rem;color:var(--muted);">Esta venta no tiene productos desglosados.</p>';
 
           return `
@@ -2445,7 +2584,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
                 <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
                   <button type="button" id="btn-detalles-venta-${v.id}" onclick="toggleDetallesVenta('${v.id}')" class="btn-sec" style="padding:4px 10px; font-size:0.75rem; width:auto; margin:0;">＋ Más detalles de esta venta</button>
                   <button type="button" onclick="imprimirTicketVenta(${idx})" class="btn-sec" style="padding:4px 10px; font-size:0.75rem; width:auto; margin:0;">Imprimir ticket</button>
-                  ${v.comprobante_url ? `<button type="button" onclick="abrirModalComprobante(${idx})" class="btn-sec" style="padding:4px 10px; font-size:0.75rem; width:auto; margin:0;">📸 Ver Captura</button>` : ''}
+                  ${v.tiene_comprobante ? `<button type="button" onclick="abrirModalComprobante(${idx})" class="btn-sec" style="padding:4px 10px; font-size:0.75rem; width:auto; margin:0;">📸 Ver Captura</button>` : ''}
                   ${esUsuarioAdmin ? `<button type="button" onclick="deshacerVenta(${v.id})" class="btn-undo">↩️ Deshacer Venta</button>` : ''}
                 </div>
                 <section id="detalles-venta-${v.id}" class="hidden" style="margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:8px;background:rgba(2,19,38,.35);">
@@ -2761,18 +2900,24 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
 
     async function abrirModalComprobante(idx) {
       const venta = listaVentasCache[idx];
-      if (venta && venta.comprobante_url) {
+      if (venta && venta.tiene_comprobante) {
+        const revision = ++comprobanteRevision;
+        const epoch = datos.privateCache.epoch;
         try {
-          const url = await obtenerUrlComprobante(venta.comprobante_url);
+          const registro = await datos.privateCache.read('captura:' + venta.id, () => datos.result(client.from('ventas').select('comprobante_url').eq('id', venta.id).single()), 240000);
+          if (!registro?.comprobante_url) throw new Error('La venta no tiene comprobante.');
+          const url = await obtenerUrlComprobante(registro.comprobante_url);
+          if (revision !== comprobanteRevision || epoch !== datos.privateCache.epoch || !usuarioActual) return;
           document.getElementById('modalImgComprobante').src = url;
           document.getElementById('modalComprobante').classList.remove('hidden');
         } catch (error) {
-          alert(error.message);
+          if (!(error instanceof datos.StaleRead)) alert(error.message);
         }
       }
     }
 
     function cerrarModalComprobante() {
+      comprobanteRevision++;
       document.getElementById('modalComprobante').classList.add('hidden');
       document.getElementById('modalImgComprobante').src = '';
     }
@@ -2781,21 +2926,24 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       if (!esAdmin()) return alert('Acceso denegado: Solo los administradores pueden descargar el archivo de ventas.');
       const desde = document.getElementById('fechaReporteDesde').value;
       const hasta = document.getElementById('fechaReporteHasta').value;
-      const ventasParaExportar = (listaVentasCache || []).filter(v => {
+      const exportEpoch = datos.privateCache.epoch;
+      const ventasParaExportar = (await leerVentas(desde, hasta)).filter(v => {
         const f = new Date(v.fecha);
-        const fecha = f.getFullYear() + '-' + String(f.getMonth() + 1).padStart(2, '0') + '-' + String(f.getDate()).padStart(2, '0');
+        const fecha = datos.dayInLima(f);
         return (!desde || fecha >= desde) && (!hasta || fecha <= hasta);
       });
       if (typeof XLSX === 'undefined') return alert('Error: La librería de Excel aún se está cargando. Por favor reintenta en un momento.');
-      const { data: movimientos, error: errorMovimientos } = await client.from('inventario_movimientos')
-        .select('*').order('fecha', { ascending: false });
+      const movimientos = await leerLista('excel-movimientos:' + desde + ':' + hasta, () => datos.dates(client.from('inventario_movimientos').select(MOVIMIENTOS_COLUMNAS), 'fecha', desde, hasta).order('fecha', { ascending: false }).order('id', { ascending: false }));
+      const errorMovimientos = null;
       if (errorMovimientos) return alert('No se pudo cargar el historial de inventario. Ejecuta database/inventario-movimientos.sql en Supabase. ' + errorMovimientos.message);
       const movimientosParaExportar = (movimientos || []).filter(movimiento => {
         const f = new Date(movimiento.fecha);
-        const fecha = f.getFullYear() + '-' + String(f.getMonth() + 1).padStart(2, '0') + '-' + String(f.getDate()).padStart(2, '0');
+        const fecha = datos.dayInLima(f);
         return (!desde || fecha >= desde) && (!hasta || fecha <= hasta);
       });
-      const { data: cierres, error: errorCierres } = await client.from('cierres_inventario_ubicaciones').select('*').order('fecha', { ascending: false });
+      const cierres = await leerLista('excel-cierres:' + desde + ':' + hasta, () => datos.dates(client.from('cierres_inventario_ubicaciones').select(CIERRES_COLUMNAS), 'fecha', desde, hasta, true).order('fecha', { ascending: false }).order('ubicacion'));
+      if (exportEpoch !== datos.privateCache.epoch) throw new datos.StaleRead();
+      const errorCierres = null;
       if (errorCierres) return alert('No se pudieron cargar los cierres de inventario. Ejecuta database/cierres-inventario.sql. ' + errorCierres.message);
       const cierresParaExportar = (cierres || []).filter(cierre => (!desde || cierre.fecha >= desde) && (!hasta || cierre.fecha <= hasta));
       if (!ventasParaExportar.length && !movimientosParaExportar.length && !cierresParaExportar.length) return alert('No hay ventas, movimientos ni cierres de inventario en el período seleccionado.');
@@ -2838,7 +2986,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
           v.vendedor_email || '',
           v.ubicacion_venta || '',
           v.notas || '',
-          v.comprobante_url ? 'SÍ' : 'NO'
+          v.tiene_comprobante ? 'SÍ' : 'NO'
         ]);
       });
 
@@ -2900,12 +3048,12 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     async function cargarEstadoAsistencia() {
       if (!usuarioActual) return;
 
-      const { data } = await client.from('asistencia')
-        .select('*')
+      const data = await datos.privateCache.read('asistencia-estado', () => datos.result(client.from('asistencia')
+        .select(ASISTENCIA_COLUMNAS)
         .eq('vendedor_email', usuarioActual.email)
         .is('fecha_salida', null)
         .order('fecha_ingreso', { ascending: false })
-        .limit(1);
+        .limit(1)), 30000);
 
       if (data && data.length > 0) {
         registroAsistenciaActivo = data[0];
@@ -3019,13 +3167,13 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
 
     async function cargarHistorialAsistencia() {
-      let query = client.from('asistencia').select('*').order('fecha_ingreso', { ascending: false }).limit(20);
+      let query = client.from('asistencia').select(ASISTENCIA_COLUMNAS).order('fecha_ingreso', { ascending: false }).limit(20);
 
       if (!esAdmin()) {
         query = query.eq('vendedor_email', usuarioActual.email);
       }
 
-      const { data: registros } = await query;
+      const registros = await datos.privateCache.read('asistencia-historial', () => datos.result(query), 30000);
       listaAsistenciaCache = registros || [];
 
       const cont = document.getElementById('listaAsistencia');
@@ -3099,7 +3247,8 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       if (!cont) return;
       cont.innerHTML = 'Cargando contactos...';
       try {
-        const { data, error } = await client.from('contactos').select('*').order('created_at', { ascending: false });
+        const data = await leerLista('contactos', () => client.from('contactos').select(CONTACTOS_COLUMNAS).order('created_at', { ascending: false }).order('id', { ascending: false }));
+        const error = null;
         if (error) { cont.innerHTML = '<p style="color:#dc3545;">' + escapeHtml(error.message) + '</p>'; return; }
         const rows = data || [];
         const pending = rows.filter(r => r.estado === 'pendiente').length;
@@ -3134,6 +3283,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         html += '</tbody></table>';
         cont.innerHTML = html;
       } catch (e) {
+        if (e instanceof datos.StaleRead) return;
         cont.innerHTML = '<p style="color:#dc3545;">' + escapeHtml(e && e.message ? e.message : String(e)) + '</p>';
       }
     }
@@ -3164,3 +3314,12 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>'"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
     }
+
+// A loader failure must not become an unhandled rejection from an inline handler.
+cargarProductos = protegerCarga('productos', cargarProductos);
+cargarTodo = protegerCarga('actualizar', cargarTodo);
+cargarHistorial = protegerCarga('historial', cargarHistorial);
+cargarCierreInventario = protegerCarga('cierre', cargarCierreInventario);
+cargarEstadoAsistencia = protegerCarga('asistencia', cargarEstadoAsistencia);
+cargarHistorialAsistencia = protegerCarga('asistencia-lista', cargarHistorialAsistencia);
+exportarExcel = protegerCarga('excel', exportarExcel);

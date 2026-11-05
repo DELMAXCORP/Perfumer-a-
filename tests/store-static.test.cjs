@@ -11,7 +11,7 @@ const core = require(path.join(root, 'store-core.js'));
 
 const requiredIds = [
   'inicio', 'coleccion', 'nosotros', 'contacto', 'product-dialog', 'bag-dialog',
-  'search', 'category-filter', 'presentation-filter', 'price-min', 'price-max'
+  'search', 'category-filter', 'price-min', 'price-max', 'customer-form'
 ];
 requiredIds.forEach(id => assert.match(html, new RegExp(`id=["']${id}["']`), `Falta #${id}`));
 
@@ -27,8 +27,8 @@ assert.match(js, /localStorage\.setItem\(STORAGE_KEY/);
 assert.match(js, /localStorage\.getItem\(STORAGE_KEY/);
 assert.match(js, /precio_decant_3ml/);
 assert.doesNotMatch(js, /let fallback = \[|const fallback = \[/, 'No deben existir precios de respaldo');
-assert.match(js, /whatsappNumber: ''/);
-assert.match(js, /encodeURIComponent\(orderSummary\(\)\)/);
+assert.match(js, /whatsappNumber: '51927025595'/);
+assert.match(js, /encodeURIComponent\(message\)/);
 assert.match(js, /notes-pyramid/);
 assert.match(metadata, /'9pm'/);
 assert.match(metadata, /'versace eros eau de toilette'/);
@@ -54,7 +54,7 @@ cart = core.updateQuantity(cart, '3', -1);
 assert.deepEqual(core.cartTotals(cart), { units: 4, amount: 565 });
 const serialized = JSON.stringify(cart);
 assert.deepEqual(core.deserializeCart(serialized), cart);
-assert.match(core.createOrderSummary(cart, 'ALPHA Perfumería'), /Total referencial: S\/ 565\.00/);
+assert.match(core.createOrderSummary(cart, 'ALPHA Perfumería'), /Total: S\/ 565\.00/);
 cart = core.removeItem(cart, '1');
 assert.deepEqual(core.cartTotals(cart), { units: 1, amount: 25 });
 

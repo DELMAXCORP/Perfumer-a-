@@ -14,6 +14,7 @@
   <!-- ========================================================= -->
 
   <!-- 1. SDK Oficial de Supabase v2 -->
+  <script src="../alpha-data.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -40,6 +41,7 @@
         <p id="userLogged" style="margin:12px 0 0; font-size:.8rem;"></p>
         <button onclick="cerrarSesion()" class="btn-sec" style="padding:6px 10px;font-size:.72rem;width:auto;margin-top:7px;">Cerrar sesión</button>
         <button type="button" id="btnConectarImpresora" onclick="abrirConexionImpresora()" class="btn-sec" style="padding:6px 10px;font-size:.8rem;width:auto;margin-top:7px;">Conectar impresora</button>
+        <button type="button" onclick="actualizarVistaActual()" class="btn-sec" style="padding:6px 10px;font-size:.8rem;width:auto;margin-top:7px;">Actualizar datos</button>
       </header>
 
       <nav class="nav-tabs" aria-label="Secciones principales">
@@ -91,7 +93,7 @@
           </div>
 
           <div id="previewPerfumeVenta" class="preview-card hidden">
-            <img id="prevImg" src="" alt="Perfume" onerror="this.src='https://static.vecteezy.com/system/resources/thumbnails/067/553/667/small/minimalist-graphic-illustration-of-a-bottle-useful-for-beauty-wellness-or-container-themes-simplicity-and-clean-design-enhance-visual-impact-vector.jpg'">
+            <img id="prevImg" src="" alt="Perfume" onerror="this.onerror=null;this.src='https://static.vecteezy.com/system/resources/thumbnails/067/553/667/small/minimalist-graphic-illustration-of-a-bottle-useful-for-beauty-wellness-or-container-themes-simplicity-and-clean-design-enhance-visual-impact-vector.jpg'">
             <div>
               <h4 id="prevNombre" style="margin:0 0 3px; font-size:0.88rem; color:var(--ivory);">--</h4>
               <p id="prevStock" style="margin:0; font-size:0.75rem; color:var(--gold-light);">Stock disponible: --</p>
@@ -201,7 +203,7 @@
             <div class="form-group" id="grpAudioPerfume">
               <label for="stkAudio">Audio para el catálogo (Opcional)</label>
               <input type="file" id="stkAudio" accept="audio/*">
-              <small style="color:var(--muted);">Al tocar la imagen o el nombre del perfume en el catálogo, se reproducirá este audio.</small>
+              <small style="color:var(--muted);">El cliente puede reproducir este audio con el botón Escuchar descripción.</small>
             </div>
 
             <div id="grpTamanoBotella" class="form-group">
@@ -534,7 +536,7 @@
         </div>
 
         <div id="previewRegaloCard" class="preview-card hidden" style="margin-top:10px;">
-          <img id="imgRegaloPreview" src="" alt="Perfume Regalo" onerror="this.src='https://static.vecteezy.com/system/resources/thumbnails/067/553/667/small/minimalist-graphic-illustration-of-a-bottle-useful-for-beauty-wellness-or-container-themes-simplicity-and-clean-design-enhance-visual-impact-vector.jpg'">
+          <img id="imgRegaloPreview" src="" alt="Perfume Regalo" onerror="this.onerror=null;this.src='https://static.vecteezy.com/system/resources/thumbnails/067/553/667/small/minimalist-graphic-illustration-of-a-bottle-useful-for-beauty-wellness-or-container-themes-simplicity-and-clean-design-enhance-visual-impact-vector.jpg'">
           <div>
             <h4 id="nombreRegaloPreview" style="margin:0 0 3px; font-size:0.88rem; color:var(--ivory);">--</h4>
             <p id="stockRegaloPreview" style="margin:0; font-size:0.75rem; color:var(--gold-light);">--</p>

@@ -242,7 +242,8 @@
       media.append(note);
     } else if (product.image) {
       const image = document.createElement('img');
-      image.src = product.image;
+      image.src = AlphaData.thumbnail(product.image);
+      image.width = 360; image.height = 360;
       image.alt = `Fotografía disponible de ${product.name}`;
       image.loading = 'lazy';
       image.addEventListener('error', () => image.replaceWith(makeFallbackMedia(product.name)), { once: true });
@@ -295,6 +296,7 @@
     return card;
   }
 
+  const catalogCards = new Map();
   function renderCatalog() {
     const products = getFilteredProducts();
     elements.productGrid.replaceChildren();
@@ -303,7 +305,12 @@
     elements.resultCount.textContent = `${products.length} ${products.length === 1 ? 'presentación' : 'presentaciones'}`;
     elements.catalogEmpty.hidden = products.length > 0;
     elements.productGrid.hidden = products.length === 0;
-    products.forEach(product => elements.productGrid.append(makeProductCard(product)));
+    products.forEach(product => {
+      const signature = JSON.stringify(product);
+      let entry = catalogCards.get(product.id);
+      if (!entry || entry.signature !== signature) { entry = { signature, card: makeProductCard(product) }; catalogCards.set(product.id, entry); }
+      elements.productGrid.append(entry.card);
+    });
   }
 
   function productDetailMedia(product) {
@@ -530,26 +537,38 @@
     elements.resultCount.textContent = 'Catálogo no disponible';
   }
 
-  async function loadCatalog() {
+  let catalogLoading = null;
+  async function requestCatalog() {
     elements.catalogError.hidden = true;
     elements.productGrid.hidden = false;
     elements.productGrid.setAttribute('aria-busy', 'true');
     elements.resultCount.textContent = 'Cargando colección…';
     try {
       if (!window.supabaseClient) throw new Error('El cliente de catálogo no está disponible.');
-      const { data, error } = await window.supabaseClient
+      const epoch = AlphaData.publicCache.epoch;
+      const data = await AlphaData.publicCache.read('catalogo', () => AlphaData.all(() => window.supabaseClient
         .from('catalogo_publico')
         .select('id,nombre,tipo,tamano,precio_venta,imagen_url,audio_url,agotado,precio_decant_3ml,precio_decant_5ml,precio_decant_10ml,precio_decant_30ml')
-        .order('nombre', { ascending: true });
-      if (error) throw error;
+        .order('nombre', { ascending: true }).order('id'), 500, () => epoch === AlphaData.publicCache.epoch), 60000);
       state.products = buildProducts(data || []);
       renderCatalog();
     } catch (error) {
-      console.error('No se pudo cargar el catálogo público:', error);
+      if (error instanceof AlphaData.StaleRead) return;
+      console.error('No se pudo cargar el catálogo público.');
       showCatalogError();
+      elements.catalogError.querySelector('p').textContent = error.message || AlphaData.message(error);
     }
   }
 
+  function loadCatalog() {
+    if (catalogLoading) return catalogLoading;
+    catalogLoading = requestCatalog().finally(() => { catalogLoading = null; });
+    return catalogLoading;
+  }
+  window.addEventListener('alpha:products', () => {
+    AlphaData.publicCache.clear();
+    if (catalogLoading) catalogLoading.finally(loadCatalog); else loadCatalog();
+  });
   elements.filters.addEventListener('input', renderCatalog);
   elements.filters.addEventListener('change', renderCatalog);
   elements.filters.addEventListener('reset', () => window.setTimeout(renderCatalog, 0));

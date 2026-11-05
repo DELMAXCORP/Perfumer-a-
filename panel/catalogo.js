@@ -5,7 +5,12 @@
   const search = document.getElementById('catalog-search');
   const status = document.getElementById('catalog-status');
   let products = [];
-  let currentAudio = null;
+  const currentAudio = new Audio();
+  currentAudio.preload = 'none';
+  let loadedAt = 0;
+  let loading = null;
+  let rendered = '';
+  const CACHE_MS = 5 * 60 * 1000;
   const norm = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
   const isSealed = product => norm(product.tipo).trim() === 'perfume sellado';
 
@@ -14,11 +19,9 @@
       status.textContent = `El perfume ${product.nombre} todavía no tiene audio.`;
       return;
     }
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio.currentTime = 0;
-    }
-    currentAudio = new Audio(product.audio_url);
+    currentAudio.pause();
+    if (currentAudio.src !== product.audio_url) currentAudio.src = product.audio_url;
+    currentAudio.currentTime = 0;
     currentAudio.play().then(() => {
       status.textContent = `Reproduciendo audio de ${product.nombre}.`;
     }).catch(error => {
@@ -31,14 +34,11 @@
     const button = document.createElement('button');
     button.type = 'button';
     button.className = className;
-    const action = product.audio_url
-      ? 'Mostrar u ocultar precios de decant y reproducir audio'
-      : 'Mostrar u ocultar precios de decant';
+    const action = 'Mostrar u ocultar precios de decant';
     button.setAttribute('aria-label', `${action} de ${product.nombre}`);
     button.title = action;
     button.append(content);
     button.addEventListener('click', () => {
-      if (product.audio_url) playProductAudio(product);
       const details = button.closest('.product-card').querySelector('.decant-prices');
       if (!details) return;
       details.hidden = !details.hidden;
@@ -110,6 +110,8 @@
   function renderProducts() {
     const query = norm(search.value.trim());
     const visible = products.filter(product => norm(`${product.nombre} ${product.tipo || ''} ${product.tamano || ''}`).includes(query));
+    const signature = JSON.stringify(visible);
+    if (signature === rendered) return;
     count.textContent = `${visible.length} ${visible.length === 1 ? 'perfume' : 'perfumes'}`;
     grid.replaceChildren();
     if (!visible.length) {
@@ -117,6 +119,7 @@
       message.className = 'message';
       message.textContent = products.length ? 'No encontramos perfumes con esa búsqueda.' : 'Todavía no hay perfumes disponibles en el catálogo.';
       grid.append(message);
+      rendered = signature;
       return;
     }
 
@@ -125,9 +128,11 @@
       card.className = 'product-card';
       const image = document.createElement('img');
       image.className = 'product-image';
-      image.src = product.imagen_url || IMG_DEFAULT;
+      image.width = 360;
+      image.height = 360;
       image.alt = product.nombre || 'Perfume';
       image.loading = 'lazy';
+      image.src = AlphaData.thumbnail(product.imagen_url) || IMG_DEFAULT;
       image.addEventListener('error', () => { image.src = IMG_DEFAULT; }, { once: true });
       const imageButton = makeAudioButton(product, image, 'product-image-trigger');
       imageButton.setAttribute('aria-expanded', 'false');
@@ -171,36 +176,72 @@
       const toggle = makeAudioButton(product, document.createTextNode('Ver decants y precios'), 'decant-toggle');
       toggle.setAttribute('aria-expanded', 'false');
       info.append(toggle, decantPrices);
+      if (product.audio_url) {
+        const audioButton = document.createElement('button');
+        audioButton.type = 'button';
+        audioButton.className = 'decant-toggle';
+        audioButton.textContent = 'Escuchar descripción';
+        audioButton.addEventListener('click', () => playProductAudio(product));
+        info.append(audioButton);
+      }
       card.append(info);
       grid.append(card);
     });
+    rendered = signature;
   }
 
-  async function loadCatalog() {
+  async function requestCatalog() {
     try {
-      const { data, error } = await window.supabaseClient.from('catalogo_publico')
+      const epoch = AlphaData.publicCache.epoch;
+      const data = await AlphaData.publicCache.read('catalogo', () => AlphaData.all(() => window.supabaseClient.from('catalogo_publico')
         .select('id,nombre,tipo,tamano,precio_venta,imagen_url,audio_url,agotado,precio_decant_3ml,precio_decant_5ml,precio_decant_10ml,precio_decant_30ml')
-        .order('nombre', { ascending: true });
-      if (error) throw error;
+        .order('nombre', { ascending: true }).order('id'), 500, () => epoch === AlphaData.publicCache.epoch), CACHE_MS);
       // Incluye botellas selladas y productos disponibles para decant. Si hay
       // filas de ambos tipos con el mismo nombre, deduplicateProducts conserva
       // el precio sugerido de la botella sellada.
       products = deduplicateProducts(data || []);
+      loadedAt = Date.now();
       renderProducts();
+      status.textContent = 'Actualizado. Se comprueban cambios cada 5 minutos mientras está visible.';
     } catch (error) {
+      if (error instanceof AlphaData.StaleRead) return;
+      if (products.length) { status.textContent = error.message; return; }
       count.textContent = 'No disponible';
       grid.replaceChildren();
       const message = document.createElement('p');
       message.className = 'message';
-      message.textContent = 'No se pudo cargar el catálogo. Ejecuta la configuración SQL del catálogo y revisa tu conexión.';
+      message.textContent = error.message || AlphaData.message(error);
       grid.append(message);
       console.error('Error al cargar el catálogo:', error);
     }
   }
 
+  function loadCatalog(force = false) {
+    if (loading) return loading;
+    if (!force && loadedAt && Date.now() - loadedAt < CACHE_MS) return Promise.resolve();
+    if (force) AlphaData.publicCache.clear();
+    loading = requestCatalog().finally(() => { loading = null; });
+    return loading;
+  }
+
   search.addEventListener('input', renderProducts);
   loadCatalog();
-  // Detecta nuevos productos o cambios de stock mientras el catálogo sigue abierto.
-  window.setInterval(() => { if (!document.hidden) loadCatalog(); }, 30000);
+  // One refresh per five minutes of visible use; hidden tabs do not query.
+  window.setInterval(() => { if (!document.hidden) loadCatalog(true); }, CACHE_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadCatalog(); });
+  window.addEventListener('alpha:products', () => {
+    loadedAt = 0;
+    if (!document.hidden) {
+      if (loading) loading.finally(() => loadCatalog());
+      else loadCatalog();
+    }
+  });
+  const refresh = document.createElement('button');
+  refresh.type = 'button'; refresh.className = 'decant-toggle'; refresh.textContent = 'Actualizar catálogo';
+  refresh.addEventListener('click', () => { void loadCatalog(true); });
+  count.parentElement.append(refresh);
+  const notice = document.createElement('p');
+  notice.textContent = 'Actualización automática cada 5 minutos mientras esta pestaña está visible. Puedes actualizar ahora.';
+  count.parentElement.after(notice);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) currentAudio.pause(); });
 })();
