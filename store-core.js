@@ -20,12 +20,14 @@
     const query = normalize(filters.query);
     const category = filters.category || 'all';
     const presentation = filters.presentation || 'all';
+    const brand = filters.brand || 'all';
     const min = filters.min === null || filters.min === '' ? null : Number(filters.min);
     const max = filters.max === null || filters.max === '' ? null : Number(filters.max);
     return products.filter(product => {
       if (query && !normalize(`${product.name} ${product.brand}`).includes(query)) return false;
       if (category !== 'all' && product.category !== category) return false;
       if (presentation !== 'all' && product.presentation !== presentation) return false;
+      if (brand !== 'all' && product.brand !== brand) return false;
       if (min !== null && (product.price === null || product.price < min)) return false;
       if (max !== null && (product.price === null || product.price > max)) return false;
       return true;

@@ -4,9 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1c33">
-  <meta name="description" content="ALPHA Store: perfumes completos y decants en Ica, Perú.">
-  <title>ALPHA Store | Perfumes y decants en Ica</title>
+  <meta name="description" content="ALPHA Perfumería: perfumes completos y decants en Ica, Perú. Explora fragancias árabes y de diseñador con notas olfativas y precios claros.">
+  <title>ALPHA Perfumería | Perfumes y decants en Ica</title>
+  <meta property="og:description" content="Perfumes completos y decants en Ica, Perú. Fragancias árabes y de diseñador con pirámide de notas y precios reales.">
+  <meta property="og:title" content="ALPHA Perfumería | Perfumes y decants en Ica">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_PE">
+  <meta property="og:site_name" content="ALPHA Perfumería">
+  <meta property="og:image" content="assets/hero-decants-pexels.jpg">
+  <meta property="og:image:alt" content="Atomizadores de decants de perfume sobre un estuche">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/jpeg" href="assets/alpha-logo.jpeg">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
   <script src="alpha-data.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -39,7 +48,7 @@
         <p class="eyebrow">PERFUMERÍA EN ICA, PERÚ</p>
         <h1 id="hero-title">Tu próxima fragancia, <em>en la presentación ideal.</em></h1>
         <p class="hero-lead">Explora perfumes completos y decants, compara cantidades y prepara tu pedido con información clara.</p>
-        <div class="hero-actions"><a class="button button-primary" href="#coleccion">Explorar colección</a><a class="text-link" href="#como-elegir">¿Completo o decant?</a></div>
+        <div class="hero-actions"><a class="button button-primary" href="#coleccion">Explorar colección</a><button class="button button-secondary" type="button" data-wa-message="Hola, ALPHA Perfumería. Quisiera recibir el catálogo completo de perfumes con sus precios y decants disponibles.">Pedir catálogo por WhatsApp</button><a class="text-link" href="#como-elegir">¿Completo o decant?</a></div>
         <p class="manual-note"><span aria-hidden="true">●</span> Los pedidos se coordinan manualmente por WhatsApp.</p>
       </div>
       <figure class="hero-showcase">
@@ -61,10 +70,12 @@
       <form class="filters" id="filters" role="search">
         <div class="search-field"><label for="search">Buscar por nombre o marca</label><div class="input-with-icon"><span aria-hidden="true">⌕</span><input id="search" name="search" type="search" placeholder="Ej. nombre de la fragancia" autocomplete="off"></div></div>
         <div class="filter-field"><label for="category-filter">Categoría</label><select id="category-filter" name="category"><option value="all">Todas</option><option value="arabes">Perfumes árabes</option><option value="disenador">De diseñador</option><option value="sin-clasificar">Por clasificar</option></select></div>
+        <div class="filter-field"><label for="brand-filter">Casa perfumera</label><select id="brand-filter" name="brand"><option value="all">Todas</option></select></div>
         <details class="advanced-filters"><summary>Filtrar por precio</summary><fieldset class="price-filter"><legend>Precio (S/)</legend><label><span>Desde</span><input id="price-min" type="number" min="0" step="1" inputmode="decimal" placeholder="0"></label><label><span>Hasta</span><input id="price-max" type="number" min="0" step="1" inputmode="decimal" placeholder="Sin límite"></label></fieldset></details>
         <button class="button button-quiet reset-filters" id="reset-filters" type="reset">Limpiar filtros</button>
+        <button class="button button-quiet" id="favorites-toggle" type="button" aria-pressed="false">❤ Favoritos</button>
       </form>
-      <div class="catalog-status-row"><p id="result-count" aria-live="polite">Cargando colección…</p><p class="data-note">Las categorías no confirmadas aparecen como “Por clasificar”.</p></div>
+      <div class="catalog-status-row"><p id="result-count" aria-live="polite">Cargando colección…</p><button class="button button-quiet request-favorites" id="request-favorites" type="button" disabled>❤ Pedir favoritos por WhatsApp</button><p class="data-note">Las categorías no confirmadas aparecen como “Por clasificar”.</p></div>
       <div class="product-grid" id="product-grid" aria-live="polite" aria-busy="true"><div class="loading-card" aria-hidden="true"></div><div class="loading-card" aria-hidden="true"></div><div class="loading-card" aria-hidden="true"></div></div>
       <div class="empty-state" id="catalog-empty" hidden><span aria-hidden="true">◇</span><h3>No encontramos coincidencias</h3><p>Prueba con otro nombre o ajusta los filtros.</p><button class="button button-secondary" id="empty-reset" type="button">Ver toda la colección</button></div>
       <div class="empty-state error-state" id="catalog-error" hidden><span aria-hidden="true">!</span><h3>No pudimos cargar la colección</h3><p>La conexión con el catálogo no está disponible en este momento. Inténtalo nuevamente.</p><button class="button button-secondary" id="retry-catalog" type="button">Reintentar</button></div>
@@ -85,6 +96,7 @@
     <section class="contact-section" id="contacto" aria-labelledby="contact-title">
       <div><p class="eyebrow">CONTACTO</p><h2 id="contact-title">Conversemos sobre tu pedido</h2><p>La atención y validación de pedidos es manual. Preparar o enviar un resumen no confirma disponibilidad, pago ni compra.</p></div>
       <dl class="contact-list"><div><dt>Ubicación confirmada</dt><dd>Ica, Perú</dd></div><div><dt>WhatsApp oficial</dt><dd><a class="contact-whatsapp" href="https://wa.me/51927025595" target="_blank" rel="noopener noreferrer">+51 927 025 595</a></dd></div><div><dt>Dirección y horario</dt><dd class="pending-value">Pendientes de confirmar</dd></div><div><dt>Pago y entrega</dt><dd class="pending-value">Condiciones pendientes de confirmar</dd></div></dl>
+      <div class="contact-actions"><button class="button button-primary" type="button" data-wa-message="Hola, ALPHA Perfumería. Quisiera recibir el catálogo completo de perfumes con sus precios y decants disponibles.">Pedir catálogo</button><button class="button button-secondary" type="button" data-wa-message="Hola, ALPHA Perfumería. Tengo una consulta sobre un perfume y quisiera más información.">Hacer una consulta</button></div>
     </section>
   </main>
 
@@ -135,5 +147,14 @@
       <p class="customer-feedback" id="customer-feedback" role="status" aria-live="polite"></p>
     </form>
   </dialog>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        if (location.protocol === 'https:' || location.hostname === 'localhost') {
+          navigator.serviceWorker.register('./sw.js').catch(() => {});
+        }
+      });
+    }
+  </script>
 </body>
 </html>

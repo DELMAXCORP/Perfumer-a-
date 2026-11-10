@@ -28,16 +28,50 @@
   ];
   const DEFAULT_DECANT_PRICES = { '3 ml': 15, '5 ml': 25, '10 ml': 35, '30 ml': 90 };
 
+  const FAVORITES_KEY = 'alpha-favoritos-v1';
   const state = {
     products: [],
     cart: loadCart(),
-    currentProductId: null
+    currentProductId: null,
+    // Favoritos por fragranceKey, compartidos entre sesión y pestañas.
+    favorites: loadFavorites(),
+    pendingBrand: ''
   };
+
+  function loadFavorites() {
+    try { const parsed = JSON.parse(localStorage.getItem(FAVORITES_KEY)); return Array.isArray(parsed) && parsed.every(k => typeof k === 'string') ? parsed : []; }
+    catch { return []; }
+  }
+  function saveFavorites() {
+    try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(state.favorites)); } catch { /* la bolsa vive en memoria */ }
+    catalogCards.forEach(entry => {
+      const button = entry.card.querySelector('.fav-button');
+      if (!button) return;
+      const active = hasFavorite(button.dataset.fragranceKey);
+      button.classList.toggle('is-favorite', active);
+      button.setAttribute('aria-pressed', String(active));
+      button.textContent = active ? '❤' : '♡';
+    });
+    if (typeof renderRowStatus === 'function') renderRowStatus();
+    if (typeof favoritesOnly === 'function' && favoritesOnly()) renderCatalog();
+  }
+  function hasFavorite(key) { return state.favorites.includes(key); }
+  function toggleFavorite(key) {
+    state.favorites = hasFavorite(key) ? state.favorites.filter(k => k !== key) : [...state.favorites, key];
+    saveFavorites();
+  }
+  // Nombre actual de una fragancia favorita para el mensaje de WhatsApp.
+  function favoriteProducts() {
+    return state.favorites
+      .map(key => state.products.find(item => item.fragranceKey === key && item.presentation === 'completo'))
+      .filter(Boolean);
+  }
 
   const elements = {
     filters: document.getElementById('filters'),
     search: document.getElementById('search'),
     category: document.getElementById('category-filter'),
+    brand: document.getElementById('brand-filter'),
     priceMin: document.getElementById('price-min'),
     priceMax: document.getElementById('price-max'),
     productGrid: document.getElementById('product-grid'),
@@ -62,9 +96,18 @@
     customerName: document.getElementById('customer-name'),
     customerPhone: document.getElementById('customer-phone'),
     customerDelivery: document.getElementById('customer-delivery'),
+    bagFeedback: document.getElementById('bag-feedback'),
+    toast: document.getElementById('toast'),
+    customerDialog: document.getElementById('customer-dialog'),
+    customerForm: document.getElementById('customer-form'),
+    customerName: document.getElementById('customer-name'),
+    customerPhone: document.getElementById('customer-phone'),
+    customerDelivery: document.getElementById('customer-delivery'),
     customerFeedback: document.getElementById('customer-feedback'),
     closeCustomer: document.getElementById('close-customer'),
-    cancelCustomer: document.getElementById('cancel-customer')
+    cancelCustomer: document.getElementById('cancel-customer'),
+    favoritesToggle: document.getElementById('favorites-toggle'),
+    requestFavorites: document.getElementById('request-favorites')
   };
 
   function normalize(value) {
@@ -210,16 +253,44 @@
     });
   }
 
+  function updateBrandOptions() {
+    const selected = state.pendingBrand || elements.brand.value;
+    const brands = [...new Set(state.products
+      .map(item => item.brand)
+      .filter(brand => brand && brand !== 'Marca pendiente de confirmar'))]
+      .sort((a, b) => a.localeCompare(b, 'es-PE'));
+    const optionsSignature = brands.join('|');
+    if (optionsSignature === elements.brand.dataset.options && !state.pendingBrand) return;
+    elements.brand.dataset.options = optionsSignature;
+    const allOption = document.createElement('option');
+    allOption.value = 'all'; allOption.textContent = 'Todas';
+    elements.brand.replaceChildren(allOption);
+    brands.forEach(brand => {
+      const option = document.createElement('option');
+      option.value = brand; option.textContent = brand;
+      elements.brand.append(option);
+    });
+    const match = [...elements.brand.options].some(option => option.value === selected);
+    elements.brand.value = match ? selected : 'all';
+    state.pendingBrand = '';
+  }
+
+  function favoritesOnly() {
+    return elements.favoritesToggle.getAttribute('aria-pressed') === 'true';
+  }
+
   function getFilteredProducts() {
     const query = normalize(elements.search.value);
     const category = elements.category.value;
+    const brand = elements.brand.value === '' ? 'all' : elements.brand.value;
     const min = elements.priceMin.value === '' ? null : Number(elements.priceMin.value);
     const max = elements.priceMax.value === '' ? null : Number(elements.priceMax.value);
 
-    return Core.filterProducts(
-      state.products.filter(product => product.presentation === 'completo'),
-      { query, category, presentation: 'all', min, max }
-    );
+    const bases = state.products.filter(product => product.presentation === 'completo');
+    const onlyFavorites = favoritesOnly()
+      ? bases.filter(product => hasFavorite(product.fragranceKey))
+      : bases;
+    return Core.filterProducts(onlyFavorites, { query, category, brand, presentation: 'all', min, max });
   }
 
   function makeFallbackMedia(name) {
@@ -265,10 +336,28 @@
     return media;
   }
 
+  function makeFavoriteButton(product) {
+    const favorite = document.createElement('button');
+    favorite.type = 'button';
+    favorite.className = 'fav-button';
+    favorite.dataset.fragranceKey = product.fragranceKey;
+    const sync = () => {
+      const active = hasFavorite(product.fragranceKey);
+      favorite.classList.toggle('is-favorite', active);
+      favorite.setAttribute('aria-pressed', String(active));
+      favorite.setAttribute('aria-label', `${active ? 'Quitar de' : 'Añadir a'} favoritos ${product.name}`);
+      favorite.textContent = active ? '❤' : '♡';
+    };
+    sync();
+    favorite.addEventListener('click', () => toggleFavorite(product.fragranceKey));
+    return favorite;
+  }
+
   function makeProductCard(product) {
     const card = document.createElement('article');
     card.className = 'product-card';
     card.append(makeProductMedia(product));
+    card.append(makeFavoriteButton(product));
 
     const info = document.createElement('div');
     info.className = 'product-info';
@@ -279,7 +368,7 @@
     title.textContent = product.name;
     const meta = document.createElement('p');
     meta.className = 'product-meta';
-    meta.textContent = `${product.presentationLabel} · ${product.size}`;
+    meta.textContent = [product.brand !== 'Marca pendiente de confirmar' ? product.brand : '', product.presentationLabel, product.size].filter(Boolean).join(' · ');
     const price = document.createElement('p');
     price.className = 'product-price';
     price.textContent = formatMoney(product.price);
@@ -311,6 +400,75 @@
     return card;
   }
 
+  // Filtros compartibles: el estado de los filtros vive en la URL.
+  function syncFiltersUrl() {
+    const params = new URLSearchParams();
+    const query = elements.search.value.trim();
+    if (query) params.set('q', query);
+    if (elements.category.value !== 'all') params.set('cat', elements.category.value);
+    if (elements.brand.value && elements.brand.value !== 'all') params.set('marca', elements.brand.value);
+    if (favoritesOnly()) params.set('favs', '1');
+    if (elements.priceMin.value) params.set('min', elements.priceMin.value);
+    if (elements.priceMax.value) params.set('max', elements.priceMax.value);
+    const queryString = params.toString();
+    history.replaceState(null, '', queryString ? `?${queryString}` : location.pathname);
+  }
+
+  function loadFiltersFromUrl() {
+    try {
+      const params = new URLSearchParams(location.search);
+      elements.search.value = params.get('q') || '';
+      elements.category.value = ['all', 'arabes', 'disenador', 'sin-clasificar'].includes(params.get('cat')) ? params.get('cat') : 'all';
+      state.pendingBrand = params.get('marca') || '';
+      if (params.get('favs') === '1') elements.favoritesToggle.setAttribute('aria-pressed', 'true');
+      elements.priceMin.value = params.get('min') || '';
+      elements.priceMax.value = params.get('max') || '';
+    } catch { /* la URL queda intacta */
+    }
+  }
+
+  // Actualiza el botón de pedir favoritos con el conteo actual.
+  function renderRowStatus() {
+    const count = favoriteProducts().length;
+    elements.requestFavorites.disabled = count === 0;
+    elements.requestFavorites.textContent = count === 1 ? '❤ Pedir mi favorito por WhatsApp' : `❤ Pedir ${count} favoritos por WhatsApp`;
+  }
+
+  // Ficha estructurada para Google: catálogo con marca, precio y disponibilidad reales.
+  function injectCatalogSchema() {
+    const items = state.products
+      .filter(product => product.presentation === 'completo')
+      .map((product, index) => ({
+        '@type': 'Product',
+        name: product.name,
+        brand: { '@type': 'Brand', name: product.brand },
+        description: product.description,
+        category: categoryLabel(product.category),
+        position: index + 1,
+        offers: {
+          '@type': 'Offer',
+          price: product.price,
+          priceCurrency: 'PEN',
+          availability: product.available ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock'
+        }
+      }));
+    if (!items.length) return;
+    let node = document.getElementById('catalog-schema');
+    if (!node) {
+      node = document.createElement('script');
+      node.type = 'application/ld+json';
+      node.id = 'catalog-schema';
+      document.head.append(node);
+    }
+    node.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: `Catálogo de ${STORE_CONFIG.name}`,
+      numberOfItems: items.length,
+      itemListElement: items
+    });
+  }
+
   const catalogCards = new Map();
   function renderCatalog() {
     const products = getFilteredProducts();
@@ -326,6 +484,8 @@
       if (!entry || entry.signature !== signature) { entry = { signature, card: makeProductCard(product) }; catalogCards.set(product.id, entry); }
       elements.productGrid.append(entry.card);
     });
+    syncFiltersUrl();
+    renderRowStatus();
   }
 
   function productDetailMedia(product) {
@@ -407,6 +567,7 @@
             <div><p class="detail-price">${escapeHTML(formatMoney(product.price))}</p><p class="product-status${product.available ? '' : ' decant-only'}">${escapeHTML(availabilityLabel)}</p></div>
             <div class="quantity-control" aria-label="Cantidad"><button type="button" data-detail-decrease aria-label="Reducir cantidad">−</button><input id="detail-quantity" value="1" min="1" max="99" inputmode="numeric" aria-label="Cantidad"><button type="button" data-detail-increase aria-label="Aumentar cantidad">+</button></div>
             <button class="button button-primary" id="detail-add" type="button" ${canAdd ? '' : 'disabled'}>${product.price === null ? 'Precio pendiente' : product.available ? 'Añadir al carrito' : 'Disponible en decants'}</button>
+            <button class="button button-secondary" id="detail-consult" type="button">Consultar por WhatsApp</button>
             <p class="detail-disclaimer">Añadir al carrito no reserva el producto. La disponibilidad y el pedido se confirman durante la atención por WhatsApp.</p>
           </div>
           <div class="decant-options">
@@ -429,6 +590,7 @@
     elements.productDetail.querySelector('[data-detail-increase]').addEventListener('click', () => { quantityInput.value = Math.min(99, Number(quantityInput.value) + 1); });
     quantityInput.addEventListener('change', () => { quantityInput.value = Math.max(1, Math.min(99, Math.floor(Number(quantityInput.value) || 1))); });
     document.getElementById('detail-add').addEventListener('click', () => addToCart(product, Number(quantityInput.value) || 1));
+    document.getElementById('detail-consult').addEventListener('click', () => openWhatsapp(`Hola, ${STORE_CONFIG.name}. Quisiera más información sobre ${product.name} (${product.presentationLabel} ${product.size}).`));
 
     if (!elements.productDialog.open) elements.productDialog.showModal();
     elements.productDialog.scrollTop = 0;
@@ -666,6 +828,7 @@
 
   function clearFilters() {
     elements.filters.reset();
+    elements.favoritesToggle.setAttribute('aria-pressed', 'false');
     window.setTimeout(renderCatalog, 0);
   }
 
@@ -690,6 +853,8 @@
         .select('id,nombre,tipo,tamano,precio_venta,imagen_url,audio_url,agotado,precio_decant_3ml,precio_decant_5ml,precio_decant_10ml,precio_decant_30ml')
         .order('nombre', { ascending: true }).order('id'), 500, () => epoch === AlphaData.publicCache.epoch), 60000);
       state.products = buildProducts(data || []);
+      updateBrandOptions();
+      injectCatalogSchema();
       renderCatalog();
     } catch (error) {
       if (error instanceof AlphaData.StaleRead) return;
@@ -730,7 +895,20 @@
   elements.sendWhatsapp.addEventListener('click', sendWhatsapp);
   [elements.productDialog, elements.bagDialog].forEach(dialog => dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); }));
 
+  /* CTAs de WhatsApp con mensaje prellenado: dejan al cliente listo para
+     enviar y al bot con la intención clasificada desde el primer mensaje. */
+  document.querySelectorAll('[data-wa-message]').forEach(button => button.addEventListener('click', () => openWhatsapp(button.dataset.waMessage)));
+  elements.favoritesToggle.addEventListener('click', () => {
+    elements.favoritesToggle.setAttribute('aria-pressed', String(!favoritesOnly()));
+    renderCatalog();
+  });
+  elements.requestFavorites.addEventListener('click', () => {
+    const names = favoriteProducts().map(product => `• ${product.name} (${product.brand})`);
+    if (!names.length) return;
+    openWhatsapp(`Hola, ${STORE_CONFIG.name}. Estos son mis favoritos del catálogo y quisiera precios y disponibilidad:\n${names.join('\n')}`);
+  });
   document.getElementById('year').textContent = String(new Date().getFullYear());
   renderBag();
+  loadFiltersFromUrl();
   loadCatalog();
 })();
