@@ -1,7 +1,7 @@
 /* Service worker de ALPHA Perfumería: cachea el sitio (estático).
    El catálogo y las imágenes de Supabase NO se cachean aquí: los precios
    y la disponibilidad siempre deben venir en vivo de la base de datos. */
-const CACHE = 'alpha-static-v4';
+const CACHE = 'alpha-static-v6';
 const PRECACHE = [
   './',
   './index.html',

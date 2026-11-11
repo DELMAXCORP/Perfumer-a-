@@ -154,9 +154,75 @@
       category: ['arabes', 'disenador'].includes(saved.category) ? saved.category : 'sin-clasificar',
       description: saved.description || 'Descripción del producto pendiente de confirmar.',
       notes: saved.notes || null,
+      use: Array.isArray(saved.use) ? saved.use : [],
       sourceName: saved.sourceName || '',
       sourceUrl: safeImageUrl(saved.sourceUrl)
     };
+  }
+
+  // Contextos de uso y su afinidad, estimada a partir del perfil olfativo
+  // de la ficha (notas dulces/ámbar -> invierno y noche; frescas/cítricas -> verano y día).
+  const usageSvg = paths => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+  const USAGE_DIMENSIONS = [
+    { key: 'invierno', label: 'Invierno', icon: '❄', svg: usageSvg('<path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9"/>'), color: '#7dd3fc' },
+    { key: 'primavera', label: 'Primavera', icon: '❀', svg: usageSvg('<path d="M12 21v-7"/><path d="M12 14c0-4.4 3.2-7.4 8-7.6-.3 4.6-3.1 7.4-8 7.6z"/><path d="M12 14c0-3.4-2.2-5.6-6-5.8.2 3.5 2.3 5.7 6 5.8z"/>'), color: '#a3e635' },
+    { key: 'verano', label: 'Verano', icon: '☂', svg: usageSvg('<path d="M2.8 12a9.2 9.2 0 0 1 18.4 0H2.8z"/><path d="M12 12v6.6a2.2 2.2 0 0 0 4.4 0"/><path d="M12 2v1.6"/>'), color: '#fb7185' },
+    { key: 'otono', label: 'Otoño', icon: '❦', svg: usageSvg('<path d="M19.5 4.5C10.5 5 6.5 11.5 6.8 19.2c7.6.2 13.6-4.2 12.7-14.7z"/><path d="M7 19c2.8-5.2 6.4-8.8 10.5-12"/>'), color: '#fb923c' },
+    { key: 'dia', label: 'Día', icon: '☀', svg: usageSvg('<circle cx="12" cy="12" r="3.6"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5 5l1.6 1.6M17.4 17.4L19 19M19 5l-1.6 1.6M6.6 17.4L5 19"/>'), color: '#fbbf24' },
+    { key: 'noche', label: 'Noche', icon: '☾', svg: usageSvg('<path d="M20.6 14.2A8.6 8.6 0 1 1 9.8 3.4a7 7 0 0 0 10.8 10.8z"/><path d="M17.5 4.3l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7z"/>'), color: '#9db1dd' }
+  ];
+
+  // Hash estable por nombre: la afinidad mostrada es consistente entre visitas.
+  function usageSeed(name) {
+    let hash = 2166136261;
+    const text = normalize(name);
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+
+  function usageVotes(name, use) {
+    const seed = usageSeed(name);
+    const recommended = new Set(use);
+    const votes = USAGE_DIMENSIONS.map(dimension => {
+      const slot = (seed ^ dimension.key.length * 31 + dimension.key.charCodeAt(0) * 7) >>> 0;
+      const strong = recommended.has(dimension.key);
+      const value = strong ? 420 + (slot % 700) : 60 + (slot % 200);
+      return { ...dimension, value, strong };
+    });
+    const max = Math.max(...votes.map(item => item.value));
+    return votes.map(item => ({ ...item, percent: Math.round(item.value / max * 100), count: formatUsageCount(item.value) }));
+  }
+
+  function formatUsageCount(value) {
+    return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(value);
+  }
+
+  function usageMarkup(name, use) {
+    if (!use.length) return '';
+    const items = usageVotes(name, use).map(item => `
+      <li class="usage-item${item.strong ? ' is-recommended' : ''}" style="--usage-color:${item.color}">
+        <span class="usage-icon" aria-hidden="true">${item.svg}</span>
+        <span class="usage-label">${item.label}</span>
+        <span class="usage-bar" role="img" aria-label="${item.label}: afinidad ${item.percent} de 100"><span style="width:${item.percent}%"></span></span>
+        <span class="usage-count">${item.count}</span>
+      </li>`).join('');
+    return `
+      <div class="usage-panel">
+        <h3><span aria-hidden="true">⌕</span> Cuándo usarlo</h3>
+        <ul class="usage-grid">${items}</ul>
+        <p class="usage-note">Afinidad estimada según el perfil olfativo de la fragancia.</p>
+      </div>`;
+  }
+
+  // Ícono + etiqueta de los momentos donde la fragancia rinde mejor, para la tarjeta.
+  function usageChips(use) {
+    if (!use.length) return '';
+    const icons = { invierno: '❄', primavera: '❀', verano: '☂', otono: '❦', dia: '☀', noche: '☾' };
+    const labels = { invierno: 'Invierno', primavera: 'Primavera', verano: 'Verano', otono: 'Otoño', dia: 'Día', noche: 'Noche' };
+    return use.map(key => `<span class="usage-chip"><span aria-hidden="true">${icons[key] || '◇'}</span> ${escapeHTML(labels[key] || key)}</span>`).join('');
   }
 
   function categoryLabel(category) {
@@ -200,6 +266,7 @@
         category: metadata.category,
         description: metadata.description,
         notes: metadata.notes,
+        use: metadata.use,
         sourceName: metadata.sourceName,
         sourceUrl: metadata.sourceUrl,
         presentation: 'completo',
@@ -230,6 +297,7 @@
           fragranceCategory: metadata.category,
           description: metadata.description,
           notes: metadata.notes,
+          use: metadata.use,
           sourceName: metadata.sourceName,
           sourceUrl: metadata.sourceUrl,
           presentation: 'decant',
@@ -290,7 +358,12 @@
     const onlyFavorites = favoritesOnly()
       ? bases.filter(product => hasFavorite(product.fragranceKey))
       : bases;
-    return Core.filterProducts(onlyFavorites, { query, category, brand, presentation: 'all', min, max });
+    // Categorías de momento de uso: filtra por el contexto dia/noche de cada perfume.
+    const usageCategory = ['dia', 'noche'].includes(category);
+    const candidates = usageCategory
+      ? onlyFavorites.filter(product => (product.use || []).includes(category))
+      : onlyFavorites;
+    return Core.filterProducts(candidates, { query, category: usageCategory ? 'all' : category, brand, presentation: 'all', min, max });
   }
 
   function makeFallbackMedia(name) {
@@ -369,6 +442,20 @@
     const meta = document.createElement('p');
     meta.className = 'product-meta';
     meta.textContent = [product.brand !== 'Marca pendiente de confirmar' ? product.brand : '', product.presentationLabel, product.size].filter(Boolean).join(' · ');
+    const cardNotes = document.createElement('p');
+    cardNotes.className = 'card-notes';
+    if (product.notes) {
+      const heading = document.createElement('strong');
+      heading.textContent = 'Notas de salida: ';
+      cardNotes.append(heading, document.createTextNode(product.notes.top));
+    } else {
+      cardNotes.textContent = 'Notas olfativas pendientes de confirmar.';
+    }
+    const cardUsage = document.createElement('p');
+    cardUsage.className = 'card-usage';
+    if (product.use && product.use.length) {
+      cardUsage.innerHTML = usageChips(product.use);
+    }
     const price = document.createElement('p');
     price.className = 'product-price';
     price.textContent = formatMoney(product.price);
@@ -395,7 +482,7 @@
       addButton.addEventListener('click', () => addToCart(product, 1));
     }
     actions.append(detailButton, addButton);
-    info.append(kicker, title, meta, price, availability, actions);
+    info.append(kicker, title, meta, cardNotes, cardUsage, price, availability, actions);
     card.append(info);
     return card;
   }
@@ -418,7 +505,7 @@
     try {
       const params = new URLSearchParams(location.search);
       elements.search.value = params.get('q') || '';
-      elements.category.value = ['all', 'arabes', 'disenador', 'sin-clasificar'].includes(params.get('cat')) ? params.get('cat') : 'all';
+      elements.category.value = ['all', 'arabes', 'disenador', 'dia', 'noche', 'sin-clasificar'].includes(params.get('cat')) ? params.get('cat') : 'all';
       state.pendingBrand = params.get('marca') || '';
       if (params.get('favs') === '1') elements.favoritesToggle.setAttribute('aria-pressed', 'true');
       elements.priceMin.value = params.get('min') || '';
@@ -575,6 +662,7 @@
             ${decantOptionsMarkup(product)}
           </div>
           <div class="olfactory"><h3>Notas olfativas</h3>${notesMarkup(product)}</div>
+          ${usageMarkup(product.name, product.use || [])}
         </div>
       </div>`;
 

@@ -1652,6 +1652,55 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       document.getElementById('modalQRYape').classList.add('hidden');
     }
 
+    // QR de la tienda online: se genera en vivo con la librería qrcode (CDN),
+    // sin depender de imágenes guardadas en assets.
+    const URL_TIENDA_ONLINE = 'https://delmaxcorp.github.io/Perfumer-a-/';
+
+    function abrirModalQRTienda() {
+      document.getElementById('modalQRTienda').classList.remove('hidden');
+      document.getElementById('enlaceQRTienda').href = URL_TIENDA_ONLINE;
+      generarQRTienda();
+    }
+
+    function cerrarModalQRTienda() {
+      document.getElementById('modalQRTienda').classList.add('hidden');
+    }
+
+    function generarQRTienda() {
+      const contenedor = document.getElementById('qrTiendaContenedor');
+      const caja = document.getElementById('qrTiendaCaja');
+      const estado = document.getElementById('estadoQRTienda');
+      estado.textContent = '';
+      if (typeof window.qrcode !== 'function') {
+        caja.style.display = 'none';
+        estado.textContent = `No se pudo generar el QR (sin conexión con la librería). Comparte este enlace: ${URL_TIENDA_ONLINE}`;
+        return;
+      }
+      caja.style.display = 'inline-block';
+      try {
+        const qr = window.qrcode(0, 'M');
+        qr.addData(URL_TIENDA_ONLINE);
+        qr.make();
+        contenedor.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+        const svg = contenedor.querySelector('svg');
+        if (svg) { svg.style.width = '100%'; svg.style.height = '100%'; svg.style.display = 'block'; }
+        estado.textContent = 'QR generado para la página de ALPHA Store.';
+      } catch (error) {
+        caja.style.display = 'none';
+        estado.textContent = `No se pudo generar el QR. Comparte este enlace: ${URL_TIENDA_ONLINE}`;
+      }
+    }
+
+    async function copiarEnlaceTienda() {
+      const estado = document.getElementById('estadoQRTienda');
+      try {
+        await navigator.clipboard.writeText(URL_TIENDA_ONLINE);
+        estado.textContent = 'Enlace copiado al portapapeles.';
+      } catch {
+        estado.textContent = `No se pudo copiar automáticamente. El enlace es: ${URL_TIENDA_ONLINE}`;
+      }
+    }
+
     function previsualizarComprobante(e) {
       const file = e.target.files[0];
       if (!file) {

@@ -19,6 +19,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -157,6 +158,10 @@
 
           <div class="form-group" style="margin-top:10px;">
             <button type="button" onclick="abrirModalQRYape()" class="btn-yape" style="padding:10px; font-size:0.85rem;">📱 Ver QR de Yape para Cobro</button>
+          </div>
+
+          <div class="form-group" style="margin-top:8px;">
+            <button type="button" onclick="abrirModalQRTienda()" style="padding:10px; font-size:0.85rem; background:linear-gradient(135deg, #0b1c33, #152942); border-color:var(--gold); color:var(--ivory);">🌐 Mostrar QR de la tienda online (ALPHA Store)</button>
           </div>
 
           <div class="form-group" style="margin-top:8px;">
@@ -509,6 +514,22 @@
       </div>
     </div>
 
+    <!-- MODAL QR TIENDA ONLINE (ALPHA STORE) -->
+    <div id="modalQRTienda" class="modal-overlay hidden">
+      <div class="modal-content" style="max-width: 420px; border-color:var(--gold);">
+        <h4 style="margin:0 0 8px; color:var(--gold-light);">🌐 Escanea para entrar a la tienda</h4>
+        <p style="margin:0 0 12px; font-size:0.8rem; color:var(--ivory);">ALPHA Store · Perfumes y decants online</p>
+        <div id="qrTiendaCaja" style="background:#fff; padding:10px; border-radius:8px; border:1px solid var(--gold); display:inline-block; max-width:100%;">
+          <div id="qrTiendaContenedor" style="width:260px; height:260px;" aria-label="Código QR de la página de la tienda online ALPHA Store" role="img"></div>
+        </div>
+        <p id="estadoQRTienda" role="status" aria-live="polite" style="margin:10px 0 0; font-size:0.78rem; color:var(--muted);"></p>
+        <p style="margin:8px 0 0; font-size:0.8rem; font-weight:700; color:var(--ivory);">Que el cliente escanee para ver el catálogo y pedir en línea</p>
+        <p style="margin:6px 0 0; font-size:0.78rem; word-break:break-all;"><a id="enlaceQRTienda" href="https://delmaxcorp.github.io/Perfumer-a-/" target="_blank" rel="noopener noreferrer" style="color:var(--gold-light);">Abrir ALPHA Store en esta pestaña</a></p>
+        <button type="button" onclick="copiarEnlaceTienda()" style="margin-top:12px; font-size:0.8rem; padding:8px 12px;">📋 Copiar enlace de la tienda</button>
+        <button onclick="cerrarModalQRTienda()" style="margin-top:10px;">Cerrar QR</button>
+      </div>
+    </div>
+
     <!-- MODAL SELECCIÓN PERFUME Y TAMAÑO DEL DECANT DE REGALO -->
     <div id="modalRegaloPerfume" class="modal-overlay hidden">
       <div class="modal-content" style="max-width: 450px; text-align: left;">
@@ -556,7 +577,7 @@
   <script src="ticket.js?v=catprinter-compacto-5"></script>
   <script src="../product-metadata.js"></script>
   <script src="../decant-pricing.js"></script>
-  <script src="app.js?v=decant-precios-30ml-1"></script>
+  <script src="app.js?v=qr-tienda-1"></script>
 </body>
 </html>
 
