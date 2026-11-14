@@ -90,25 +90,27 @@ function panel(sourcePath = 'panel/app.js') {
 
 test('entrada: inventario y asistencia independientes, sin historial ni cierres', async () => {
   const p=panel(); await p.run('iniciarApp()');
-  assert.equal(p.requests.filter(r=>r.table==='ventas').length,0);
+  const ventasEntrada=p.requests.filter(r=>r.table==='ventas');
+  assert.equal(ventasEntrada.length,1);
+  assert.equal(ventasEntrada[0].columns,'monto_total,ubicacion_venta');
   assert.equal(p.requests.filter(r=>r.table==='cierres_inventario_ubicaciones').length,0);
   assert.equal(p.requests.filter(r=>r.table==='productos').length,2);
   assert.equal(p.requests.filter(r=>r.table==='asistencia').length,2);
   const before=p.requests.length; await p.run('cargarTodo()'); assert.equal(p.requests.length,before);
 });
 
-test('comparación reproducible del respaldo: inicio 9 → 4; refresco tras escritura 9 → 2', async t => {
+test('comparación reproducible del respaldo: inicio 9 → 5; refresco tras escritura 9 → 3', async t => {
   const backup = '.local-backups/alpha-before-optimization/panel/app.js';
   if (!fs.existsSync(backup)) { t.skip('El respaldo local no se distribuye'); return; }
   const before = panel(backup), after = panel();
   await before.run('cargarTodo()'); await new Promise(resolve=>setImmediate(resolve));
   await after.run('iniciarApp()');
-  assert.equal(before.requests.length,9); assert.equal(after.requests.length,4);
+  assert.equal(before.requests.length,9); assert.equal(after.requests.length,5);
   before.requests.length=0; after.requests.length=0;
   after.run('datos.privateCache.clear()');
   await before.run('cargarTodo()'); await new Promise(resolve=>setImmediate(resolve));
   await after.run('cargarTodo()');
-  assert.equal(before.requests.length,9); assert.equal(after.requests.length,2);
+  assert.equal(before.requests.length,9); assert.equal(after.requests.length,3);
 });
 
 test('historial: fecha en servidor, totales completos y Base64 solo bajo demanda', async () => {
@@ -151,7 +153,9 @@ test('fallo de venta restaura reserva y una venta confirmada no recarga reportes
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(p.tables.productos[0].stock,fail?3:2);
     assert.equal(p.tables.ventas.length,fail?2:3);
-    assert.equal(p.requests.some(r=>r.table==='ventas'&&r.action==='select'),false);
+    // Tras una venta confirmada solo se permite la consulta ligera de la caja del día
+    // (monto_total,ubicacion_venta); ningún reporte oculto debe recargarse.
+    assert.equal(p.requests.some(r=>r.table==='ventas'&&r.action==='select'&&r.columns!=='monto_total,ubicacion_venta'),false);
     assert.equal(p.requests.some(r=>r.table==='cierres_inventario_ubicaciones'),false);
   }
 });

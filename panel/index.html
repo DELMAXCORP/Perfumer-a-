@@ -57,7 +57,31 @@
       <!-- TAB VENTA -->
       <div id="tab-venta" class="card">
         <h3>🛒 Registrar Nueva Venta</h3>
-        
+
+        <!-- CAJA DEL DÍA: TOTALES POR MÉTODO DE PAGO -->
+        <section id="cajaDelDia" style="background: rgba(2,19,38,.4); padding:14px; border-radius:10px; border:1px solid rgba(246,240,231,.1); margin-bottom:14px;" aria-live="polite">
+          <h4 style="margin:0 0 10px; color:var(--gold-light); font-size:0.9rem;">💰 Caja de hoy</h4>
+          <div style="display:flex; flex-wrap:wrap; gap:10px;">
+            <div style="flex:1 1 110px; background:rgba(177,94,255,.12); border:1px solid rgba(177,94,255,.45); border-radius:8px; padding:10px 8px; text-align:center;">
+              <p style="margin:0; font-size:0.7rem; color:#cf9bff;">📱 Yape / Plin</p>
+              <p id="cajaMontoYape" style="margin:4px 0 0; font-size:1.05rem; font-weight:800; color:var(--ivory);">S/ 0.00</p>
+            </div>
+            <div style="flex:1 1 110px; background:rgba(46,160,90,.12); border:1px solid rgba(46,160,90,.45); border-radius:8px; padding:10px 8px; text-align:center;">
+              <p style="margin:0; font-size:0.7rem; color:#7fd49b;">💵 Efectivo</p>
+              <p id="cajaMontoEfectivo" style="margin:4px 0 0; font-size:1.05rem; font-weight:800; color:var(--ivory);">S/ 0.00</p>
+            </div>
+            <div style="flex:1 1 110px; background:rgba(80,140,255,.12); border:1px solid rgba(80,140,255,.45); border-radius:8px; padding:10px 8px; text-align:center;">
+              <p style="margin:0; font-size:0.7rem; color:#9cc0ff;">💳 Tarjeta</p>
+              <p id="cajaMontoTarjeta" style="margin:4px 0 0; font-size:1.05rem; font-weight:800; color:var(--ivory);">S/ 0.00</p>
+            </div>
+            <div style="flex:1 1 110px; background:rgba(246,197,70,.12); border:1px solid var(--gold); border-radius:8px; padding:10px 8px; text-align:center;">
+              <p style="margin:0; font-size:0.7rem; color:var(--gold-light);">🧮 Total del día</p>
+              <p id="cajaMontoTotal" style="margin:4px 0 0; font-size:1.05rem; font-weight:800; color:var(--gold-light);">S/ 0.00</p>
+            </div>
+          </div>
+          <p style="margin:10px 0 0; font-size:0.72rem; color:var(--muted);"><span id="cajaNumVentas">0</span> ventas registradas hoy · se actualiza al registrar o deshacer una venta</p>
+        </section>
+
         <div style="background: rgba(2,19,38,.4); padding:14px; border-radius:10px; border:1px solid rgba(246,240,231,.1);">
           <h4 style="margin:0 0 10px; color:var(--gold-light); font-size:0.9rem;">1. Agregar producto a la orden</h4>
           
@@ -577,7 +601,7 @@
   <script src="ticket.js?v=catprinter-compacto-5"></script>
   <script src="../product-metadata.js"></script>
   <script src="../decant-pricing.js"></script>
-  <script src="app.js?v=qr-tienda-1"></script>
+  <script src="app.js?v=caja-dia-1"></script>
 </body>
 </html>
 

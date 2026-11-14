@@ -38,6 +38,8 @@
       'Cardamomo', 'Acorde de caramelo', 'Ámbar amaderado', 'invierno otono noche'),
     'club de nuit iconic': item('Armaf', 'arabes', 'Armaf', 'https://armaf.com/products/club-de-nuit-iconic-3-6',
       'Toronja, limón, menta, pimienta rosa y cilantro', 'Jengibre, nuez moscada, jazmín y melón', 'Incienso, ámbar, cedro, sándalo, pachulí, ládano y notas amaderadas', 'primavera otono dia noche'),
+    'club de nuit intense man': item('Armaf', 'arabes', 'Fragrantica', 'https://www.fragrantica.com/perfume/Armaf/Club-de-Nuit-Intense-Man-3028.html',
+      'Limón, piña, bergamota, grosella negra y violeta', 'Manzana, abedul, jazmín y rosa', 'Almizcle, ámbar gris, vainilla y ámbar', 'primavera otono dia noche'),
     'club de nuit urban man elixir': item('Armaf', 'arabes', 'Armaf', 'https://armaf.com/products/club-de-nuit-urban-elixir-100ml',
       'Bergamota, pimienta rosa, flor de naranjo y jazmín', 'Lavanda, tagete, geranio, vetiver, elemí y azafrán', 'Ambroxan, ámbar, pachulí, cedro y ládano', 'otono invierno dia noche'),
     'eclaire': item('Lattafa', 'arabes', 'Lattafa', 'https://lattafa.com/product/eclaire/',
@@ -128,10 +130,15 @@
       'Nuez moscada, salvia esclarea y bayas de enebro', 'Iris concreto y narciso', 'Tabaco, vainilla de Madagascar y bálsamo del Perú', 'otono invierno noche'),
     'hawas fire': item('Rasasi', 'arabes', 'Rasasi Store', 'https://om.rasasistore.com/products/hawas-fire',
       'Salvia esclarea francesa', 'Jazmín egipcio y notas marinas', 'Ámbar mineral y ámbar gris', 'primavera verano dia'),
+    // En el catálogo figura como "Hawas chrone"; corresponde a Hawas Chrome de Rasasi.
+    'hawas chrone': item('Rasasi', 'arabes', 'Fragrantica', 'https://www.fragrantica.com/perfume/Rasasi/Hawas-Chrome-136922.html',
+      'Durazno, frutas amarillas y naranja dulce', 'Frutas, maracuyá, mango y notas acuáticas', 'Almizcle, ámbar y vainilla', 'primavera verano dia noche'),
     'invictus aqua': item('Rabanne', 'disenador', 'Rabanne', 'https://www.rabanne.com/us/en_US/fragrance/p/invictus-aqua--000000000065107891',
       'Aceite de toronja', 'Acorde marino', 'Amberwood', 'primavera verano dia'),
     'jean paul gaultier le beau le parfum': item('Jean Paul Gaultier', 'disenador', 'Fragrantica', 'https://www.fragrantica.com/perfume/Jean-Paul-Gaultier/Le-Beau-Le-Parfum-72158.html',
       'Piña, iris, jengibre y ciprés', 'Coco y notas amaderadas', 'Haba tonka, sándalo, ámbar y ámbar gris', 'otono invierno noche'),
+    'jean paul gaultier scandal le parfum': item('Jean Paul Gaultier', 'disenador', 'Fragrantica', 'https://www.fragrantica.com/perfume/Jean-Paul-Gaultier/Scandal-Le-Parfum-74914.html',
+      'Jazmín', 'Caramelo y sal', 'Vainilla', 'otono invierno noche'),
     'king of kings private blend chapter 1': item('King of Kings', 'arabes', 'Fragrantica', 'https://www.fragrantica.com/perfume/King-of-Kings/Chapter-I-102515.html',
       'Piña, ron blanco, coco, mango y bergamota', 'Leche de coco, notas marinas y flores blancas', 'Ámbar, almizcle, sándalo y vetiver', 'primavera verano dia'),
     'le vite est belle': item('Lancôme', 'disenador', 'Lancôme UK', 'https://www.lancome.co.uk/discover-lancome/a-guide-to-la-vie-est-belle-fragrance.html',
@@ -143,6 +150,8 @@
     'paco rabanne 1 million lucky': item('Rabanne', 'disenador', 'Rabanne', 'https://www.rabanne.com/us/en_US/fragrance/p/1-million-lucky--000000000065131403',
       'Ciruela', 'Acorde de avellana tostada', 'Cedro blanco', 'invierno otono dia noche'),
     'versace eros energy edp': item('Versace', 'disenador', 'Fragrantica', 'https://www.fragrantica.com/perfume/Versace/Eros-Energy-92647.html',
-      'Naranja sangrienta, bergamota siciliana, limón, lima, toronja y mandarina', 'Pimienta rosa, grosella negra y ámbar blanco', 'Musgo de roble, pachulí y almizcle', 'primavera verano dia')
+      'Naranja sangrienta, bergamota siciliana, limón, lima, toronja y mandarina', 'Pimienta rosa, grosella negra y ámbar blanco', 'Musgo de roble, pachulí y almizcle', 'primavera verano dia'),
+    'yves saint laurent myslf le parfum': item('Yves Saint Laurent', 'disenador', 'Fragrantica', 'https://www.fragrantica.com/perfume/Yves-Saint-Laurent/MYSLF-Le-Parfum-94983.html',
+      'Pimienta negra', 'Flor de naranjo', 'Vainilla bourbon, ámbar, notas amaderadas y pachulí', 'primavera otono dia noche')
   });
 })();

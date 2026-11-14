@@ -284,6 +284,56 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       alert(mensaje);
     }
 
+    // CAJA DEL DÍA (pestaña Vender): totales por método de pago.
+    // El método queda guardado en ubicacion_venta con el formato "Canal (Metodo)".
+    function metodoDePagoDeVenta(ubicacionVenta) {
+      const coincidencia = /\(([^()]*)\)\s*$/.exec(String(ubicacionVenta || ''));
+      const texto = (coincidencia ? coincidencia[1] : '').toLowerCase();
+      if (texto.includes('yape')) return 'Yape';
+      if (texto.includes('efectivo')) return 'Efectivo';
+      if (texto.includes('tarjeta')) return 'Tarjeta';
+      return 'Otros';
+    }
+
+    async function cargarCajaDelDia() {
+      if (!usuarioActual) return;
+      const hoy = fechaLocalClave();
+      const inicio = new Date();
+      inicio.setHours(0, 0, 0, 0);
+      const fin = new Date(inicio);
+      fin.setDate(fin.getDate() + 1);
+      let data;
+      try {
+        data = await leerLista('caja:' + hoy, () => client.from('ventas').select('monto_total,ubicacion_venta')
+          .gte('fecha', inicio.toISOString()).lt('fecha', fin.toISOString()).order('id'));
+      } catch (_) {
+        // La caja es informativa: nunca debe interrumpir el resto de la app.
+        console.warn('No se pudo cargar la caja del día.'); return;
+      }
+      const totales = { Yape: 0, Efectivo: 0, Tarjeta: 0, Otros: 0 };
+      let numeroVentas = 0;
+      for (const venta of (data || [])) {
+        const metodo = metodoDePagoDeVenta(venta.ubicacion_venta);
+        totales[metodo] = (totales[metodo] || 0) + Number(venta.monto_total || 0);
+        numeroVentas++;
+      }
+      const pintar = (id, valor) => {
+        const elemento = document.getElementById(id);
+        if (elemento) elemento.textContent = 'S/ ' + valor.toFixed(2);
+      };
+      pintar('cajaMontoYape', totales.Yape);
+      pintar('cajaMontoEfectivo', totales.Efectivo);
+      pintar('cajaMontoTarjeta', totales.Tarjeta);
+      pintar('cajaMontoTotal', totales.Yape + totales.Efectivo + totales.Tarjeta + totales.Otros);
+      const elementoNumero = document.getElementById('cajaNumVentas');
+      if (elementoNumero) elementoNumero.textContent = String(numeroVentas);
+    }
+
+    function refrescarCajaDelDia() {
+      datos.privateCache.entries.delete('caja:' + fechaLocalClave());
+      cargarCajaDelDia();
+    }
+
     const IMG_DEFAULT = 'https://static.vecteezy.com/system/resources/thumbnails/067/553/667/small/minimalist-graphic-illustration-of-a-bottle-useful-for-beauty-wellness-or-container-themes-simplicity-and-clean-design-enhance-visual-impact-vector.jpg';
     const UBICACIONES_INVENTARIO = ['Tienda Local', 'Alpha Móvil', 'Barbería'];
 
@@ -421,6 +471,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       tabActual = tab;
       if (tab === 'historial') cargarHistorial();
       if (tab === 'stock' || tab === 'venta') cargarProductos();
+      if (tab === 'venta') cargarCajaDelDia();
       secciones.forEach(t => {
         document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
         const boton = document.querySelector('.nav-tabs [data-tab="' + t + '"]');
@@ -450,6 +501,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
     async function cargarTodo() {
       await cargarProductos();
+      if (tabActual === 'venta') await cargarCajaDelDia();
       if (tabActual === 'historial') await cargarHistorial();
       if (tabActual === 'cierre') await cargarCierreInventario();
     }
@@ -2361,6 +2413,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
             setTimeout(terminar, Number.isFinite(sonidoVenta.duration) ? sonidoVenta.duration * 1000 + 1500 : 20000);
           });
           await comprobarMetaVentasDiaria(audioVentaFinalizado);
+          refrescarCajaDelDia();
           mostrarAviso('Venta registrada correctamente. Puedes imprimir el ticket desde el Historial.', 'success');
           const agotadosEnVenta = reservaStock.filter(r => r.mlAnterior !== undefined && Number(r.mlReservado) === 0);
           if (agotadosEnVenta.length) {
@@ -2703,6 +2756,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         alert('Error al deshacer la venta: ' + error.message);
       } else {
         alert('¡Venta anulada correctamente! Se devolvieron los mililitros y el stock de envases/productos.');
+        refrescarCajaDelDia();
         cargarTodo();
       }
     }
