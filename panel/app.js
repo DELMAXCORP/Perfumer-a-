@@ -295,6 +295,16 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       return 'Otros';
     }
 
+    function canalDeVenta(ubicacionVenta) {
+      return String(ubicacionVenta || '').replace(/\s*\([^()]*\)\s*$/, '').trim() || 'Otro';
+    }
+
+    const CANALES_CAJA = [
+      { clave: 'Tienda Local', id: 'cajaEfectivoLocal' },
+      { clave: 'Alpha Móvil', id: 'cajaEfectivoMovil' },
+      { clave: 'Barbería', id: 'cajaEfectivoBarberia' }
+    ];
+
     async function cargarCajaDelDia() {
       if (!usuarioActual) return;
       const hoy = fechaLocalClave();
@@ -311,20 +321,29 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         console.warn('No se pudo cargar la caja del día.'); return;
       }
       const totales = { Yape: 0, Efectivo: 0, Tarjeta: 0, Otros: 0 };
+      const efectivoPorCanal = {};
       let numeroVentas = 0;
       for (const venta of (data || [])) {
         const metodo = metodoDePagoDeVenta(venta.ubicacion_venta);
-        totales[metodo] = (totales[metodo] || 0) + Number(venta.monto_total || 0);
+        const monto = Number(venta.monto_total || 0);
+        totales[metodo] = (totales[metodo] || 0) + monto;
+        if (metodo === 'Efectivo') {
+          const canal = canalDeVenta(venta.ubicacion_venta);
+          efectivoPorCanal[canal] = (efectivoPorCanal[canal] || 0) + monto;
+        }
         numeroVentas++;
       }
       const pintar = (id, valor) => {
         const elemento = document.getElementById(id);
         if (elemento) elemento.textContent = 'S/ ' + valor.toFixed(2);
       };
+      const elementoFecha = document.getElementById('cajaFecha');
+      if (elementoFecha) elementoFecha.textContent = '· ' + new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' });
       pintar('cajaMontoYape', totales.Yape);
       pintar('cajaMontoEfectivo', totales.Efectivo);
       pintar('cajaMontoTarjeta', totales.Tarjeta);
       pintar('cajaMontoTotal', totales.Yape + totales.Efectivo + totales.Tarjeta + totales.Otros);
+      for (const canal of CANALES_CAJA) pintar(canal.id, efectivoPorCanal[canal.clave] || 0);
       const elementoNumero = document.getElementById('cajaNumVentas');
       if (elementoNumero) elementoNumero.textContent = String(numeroVentas);
     }
