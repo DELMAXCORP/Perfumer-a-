@@ -256,7 +256,9 @@
     sealedGroups.forEach((group, groupKey) => {
       const first = group[0];
       const metadata = getMetadata(first.nombre);
-      const priced = group.find(item => numericPrice(item.precio_venta) !== null);
+      // Filas ordenadas por id ascendente: el precio válido es el de la fila más
+      // reciente (la última con precio), no la más antigua.
+      const priced = [...group].reverse().find(item => numericPrice(item.precio_venta) !== null);
       const image = group.map(item => safeImageUrl(item.imagen_url)).find(Boolean) || '';
       products.push({
         id: `completo|${groupKey}`,
@@ -283,7 +285,8 @@
       const metadata = getMetadata(fragrance.name);
       const referenceImage = fragrance.rows.map(item => safeImageUrl(item.imagen_url)).find(Boolean) || '';
       DECANT_SIZES.forEach(([size, field]) => {
-        const stored = fragrance.rows.map(item => numericPrice(item[field])).find(value => value !== null);
+        // Igual que en los sellados: la fila más reciente define el precio guardado.
+        const stored = [...fragrance.rows].reverse().map(item => numericPrice(item[field])).find(value => value !== null);
         const price = size === '30 ml'
           ? window.AlphaDecantPricing.price30ml(fragrance.name)
           : stored ?? defaultDecantPrice(fragrance.name, size);

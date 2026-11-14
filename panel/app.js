@@ -1355,17 +1355,26 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         return alert("Por favor ingresa valores numéricos válidos.");
       }
 
-      const { error } = await client.from('productos').update({
+      // El nombre y el PVP son de la fragancia: se sincronizan en TODAS sus filas
+      // (lotes y ubicaciones) para que ALPHA Store muestre el precio editado.
+      const claveFragancia = normalizarTexto(prod.nombre).replace(/\s+/g, ' ').trim();
+      const idsFragancia = listaProductos.filter(p => ['Perfume Sellado', 'Perfume para Decant'].includes(p.tipo)
+        && normalizarTexto(p.nombre).replace(/\s+/g, ' ').trim() === claveFragancia).map(p => p.id);
+      const { error: errorFragancia } = await client.from('productos').update({
         nombre: nuevoNombre.trim(),
+        precio_sugerido: nuevoPVP
+      }).in('id', idsFragancia.length ? idsFragancia : [id]);
+
+      // El stock, el costo y la imagen son de esta fila específica (lote/ubicación).
+      const { error } = await client.from('productos').update({
         stock: nuevoStock,
         precio: nuevoPrecio,
-        precio_sugerido: nuevoPVP,
         imagen_url: nuevaImagen.trim() || null
       }).eq('id', id);
 
-      if (error) alert('Error al editar producto: ' + error.message);
+      if (error || errorFragancia) alert('Error al editar producto: ' + (error || errorFragancia).message);
       else {
-        alert('¡Producto actualizado correctamente!');
+        alert(`¡Producto actualizado correctamente! Precio sincronizado en ${Math.max(idsFragancia.length, 1)} fila(s) del perfume.`);
         cargarTodo();
       }
     }
