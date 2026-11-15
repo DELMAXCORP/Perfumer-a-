@@ -442,3 +442,9 @@
   .cierre-perfume-row label { font-size:.66rem; }
   .cierre-perfume-row input { min-height:40px; padding:6px 4px; }
 }
+
+/* Controles de modo del gráfico de ventas por ubicación */
+.grafico-controles { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+.grafico-controles .btn-sec { padding: 6px 12px; font-size: 0.75rem; width: auto; }
+.grafico-controles .btn-sec.activo { background: var(--gold); color: #16202b; border-color: var(--gold); font-weight: 700; }
+.grafico-controles select { padding: 6px 10px; font-size: 0.78rem; border-radius: 8px; border: 1px solid var(--gold); background: var(--night); color: var(--ivory); font: inherit; }

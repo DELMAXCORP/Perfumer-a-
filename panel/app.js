@@ -502,6 +502,8 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       if (tab === 'asistencia') cargarEstadoAsistencia();
       if (tab === 'cierre') cargarCierreInventario();
       if (tab === 'contactos') cargarContactosMarketing();
+      // Al abrir el historial, el gráfico debe ser lo primero que se vea.
+      if (tab === 'historial') window.scrollTo({ top: 0, behavior: 'smooth' });
     }
    
 
@@ -2578,7 +2580,9 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
             etiquetaCorta: fechaObj.toLocaleDateString('es-ES', { timeZone: 'America/Lima', day: '2-digit', month: 'short' }),
             ventas: [],
             totalGanado: 0,
-            gananciaNetaTotal: 0
+            gananciaNetaTotal: 0,
+            metodos: { Yape: 0, Efectivo: 0, Tarjeta: 0, Otros: 0 },
+            efectivoPorCanal: {}
           };
         }
         
@@ -2638,6 +2642,15 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         grupos[claveFechaLocal].ventas.push({ venta: v, indexGlobal: listaVentasCache.indexOf(v), gananciaNetaCalculada: ganNeta });
         grupos[claveFechaLocal].totalGanado += montoVenta;
         grupos[claveFechaLocal].gananciaNetaTotal += ganNeta;
+
+        // Totales del día por método de pago (para el cierre de caja diario).
+        const metodoVenta = metodoDePagoDeVenta(v.ubicacion_venta);
+        const grupoDia = grupos[claveFechaLocal];
+        grupoDia.metodos[metodoVenta] = (grupoDia.metodos[metodoVenta] || 0) + montoVenta;
+        if (metodoVenta === 'Efectivo') {
+          const canalVenta = canalDeVenta(v.ubicacion_venta);
+          grupoDia.efectivoPorCanal[canalVenta] = (grupoDia.efectivoPorCanal[canalVenta] || 0) + montoVenta;
+        }
       });
 
       renderizarGraficoVentas(grupos);
@@ -2652,6 +2665,29 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         const gananciaNetaSoles = grupo.gananciaNetaTotal.toFixed(2);
         const esPrimerDia = dayIdx === 0;
         const notaCierre = notasCierreCache[clave] || '';
+        const efectivoDia = grupo.metodos.Efectivo || 0;
+        const efectivoLocalDia = grupo.efectivoPorCanal['Tienda Local'] || 0;
+        const efectivoMovilDia = grupo.efectivoPorCanal['Alpha Móvil'] || 0;
+        const efectivoBarberiaDia = grupo.efectivoPorCanal['Barbería'] || 0;
+        const chipCierre = (etiqueta, monto) => `<span style="background:rgba(2,19,38,.6); border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:.75rem; color:var(--muted);">${etiqueta} <strong style="color:var(--ivory);">S/ ${monto.toFixed(2)}</strong></span>`;
+        const chipsMetodosDia = [
+          chipCierre('📱 Yape / Plin', grupo.metodos.Yape || 0),
+          chipCierre('💵 Efectivo', efectivoDia),
+          chipCierre('💳 Tarjeta', grupo.metodos.Tarjeta || 0)
+        ];
+        if (grupo.metodos.Otros) chipsMetodosDia.push(chipCierre('🧾 Otros', grupo.metodos.Otros));
+        const panelCajaDia = `
+          <section style="background:rgba(2,19,38,.4); border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:10px;" aria-label="Cierre de caja del día">
+            <p style="margin:0 0 8px; font-size:.78rem; color:var(--gold-light); font-weight:700;">💰 Totales del día por método de pago</p>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">${chipsMetodosDia.join('')}</div>
+            <p style="margin:10px 0 6px; font-size:.75rem; color:var(--muted);">💵 Efectivo recibido por punto de venta</p>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              ${chipCierre('🏪 Tienda Local', efectivoLocalDia)}
+              ${chipCierre('🚐 Alpha Móvil', efectivoMovilDia)}
+              ${chipCierre('💈 Barbería', efectivoBarberiaDia)}
+            </div>
+            <p style="margin:10px 0 0; font-size:.85rem;"><strong style="color:#a3e6af;">💵 Efectivo que debe haber en caja este día: S/ ${efectivoDia.toFixed(2)}</strong></p>
+          </section>`;
         const panelNotaCierre = esUsuarioAdmin
           ? `<section class="cash-note-editor"><label for="notaCierre-${clave}">📝 Nota del cierre de caja</label><textarea id="notaCierre-${clave}" maxlength="2000" rows="3" placeholder="Ej.: Fue un buen día porque hubo un evento en el local.">${escaparHTML(notaCierre)}</textarea><button type="button" class="btn-add" id="btnNotaCierre-${clave}" onclick="guardarNotaCierre('${clave}')">Guardar nota</button></section>`
           : notaCierre.trim() ? `<div class="cash-note-readonly"><strong>📝 Nota del cierre:</strong> ${escaparHTML(notaCierre)}</div>` : '';
@@ -2734,10 +2770,12 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
                 <strong>${numVentas} ${numVentas === 1 ? 'venta' : 'ventas'}</strong><br>
                 <span>Venta Total: <strong>S/ ${totalVentaSoles}</strong></span>
                 ${esUsuarioAdmin ? ` | <span style="color:#a3e6af;">Margen: <strong>S/ ${gananciaNetaSoles}</strong></span>` : ''}
+                <br><span>💵 Efectivo del día: <strong>S/ ${efectivoDia.toFixed(2)}</strong></span>
                 <span id="arrow-${clave}">${esPrimerDia ? '▲' : '▼'}</span>
               </span>
             </button>
             <div id="content-${clave}" class="day-content ${esPrimerDia ? '' : 'hidden'}">
+              ${panelCajaDia}
               ${panelNotaCierre}
               ${htmlVentas}
             </div>
@@ -2789,10 +2827,396 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       }
     }
 
-    function renderizarGraficoVentas(grupos) {
-      const ctx = document.getElementById('chartVentasDiarias');
-      if (!ctx) return;
+    // Ubicaciones del gráfico de ventas, con su color fijo en las barras.
+    const CANALES_GRAFICO = [
+      { clave: 'Tienda Local', color: '#7fbf8e' },
+      { clave: 'Alpha Móvil', color: '#7ea8d8' },
+      { clave: 'Barbería', color: '#e2b156' }
+    ];
+    let modoGrafico = 'ventas';
+    let granularidadGrafico = 'dia';
+    let ultimoDatosGrafico = null;
+    let ultimasClavesGrafico = [];
 
+    function colorEstadoDe(totales, metas, equilibrios) {
+      return totales.map((valor, indice) => {
+        if (valor >= metas[indice]) return '#85b88f';
+        if (valor >= equilibrios[indice]) return '#f1c36d';
+        return '#d99076';
+      });
+    }
+
+    function canalSuperiorDe(resumenCanales) {
+      return resumenCanales.map(r => {
+        for (let k = CANALES_GRAFICO.length - 1; k >= 0; k--) {
+          if ((r.porCanal[CANALES_GRAFICO[k].clave] || 0) > 0) return CANALES_GRAFICO[k].clave;
+        }
+        return null;
+      });
+    }
+
+    // Semana ISO (lunes a domingo) a partir de una clave 'YYYY-MM-DD' local.
+    function datosSemanaDe(claveFecha) {
+      const fecha = new Date(claveFecha + 'T12:00:00Z');
+      const dia = fecha.getUTCDay();
+      const offset = dia === 0 ? -6 : 1 - dia;
+      const lunes = new Date(fecha);
+      lunes.setUTCDate(fecha.getUTCDate() + offset);
+      const jueves = new Date(lunes);
+      jueves.setUTCDate(lunes.getUTCDate() + 3);
+      const inicioAno = Date.UTC(jueves.getUTCFullYear(), 0, 1);
+      const numeroSemana = Math.floor(((jueves.getTime() - inicioAno) / 86400000 + new Date(inicioAno).getUTCDay() + 1) / 7) + 1;
+      const domingo = new Date(lunes.getTime() + 6 * 86400000);
+      const corto = d => d.getUTCDate() + '/' + (d.getUTCMonth() + 1);
+      return {
+        clave: jueves.getUTCFullYear() + '-S' + String(numeroSemana).padStart(2, '0'),
+        etiqueta: 'S' + numeroSemana + ' · ' + corto(lunes) + '–' + corto(domingo),
+        lunes
+      };
+    }
+
+    const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+    function etiquetaDiaDe(claveFecha) {
+      const fecha = new Date(claveFecha + 'T12:00:00Z');
+      return DIAS_CORTOS[fecha.getUTCDay()] + ' ' + fecha.getUTCDate() + '/' + (fecha.getUTCMonth() + 1);
+    }
+
+    function construirDatosGrafico(grupos) {
+      let clavesBase = Object.keys(grupos).sort();
+
+      // Vista diaria: completa el calendario de lunes a domingo dentro del rango
+      // elegido, dejando en 0 los días sin ventas para que se vean los 7 días.
+      if (granularidadGrafico === 'dia' && clavesBase.length) {
+        const campoDesde = document.getElementById('fechaReporteDesde');
+        const campoHasta = document.getElementById('fechaReporteHasta');
+        const desde = (campoDesde && campoDesde.value) || clavesBase[0];
+        const hasta = (campoHasta && campoHasta.value) || clavesBase[clavesBase.length - 1];
+        if (desde && hasta && desde <= hasta) {
+          const llenado = [];
+          const cursor = new Date(desde + 'T12:00:00Z');
+          const fin = new Date(hasta + 'T12:00:00Z');
+          while (cursor <= fin && llenado.length < 400) {
+            llenado.push(cursor.toISOString().slice(0, 10));
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
+          }
+          if (llenado.length) clavesBase = llenado;
+        }
+      }
+
+      const labels = clavesBase.map(etiquetaDiaDe);
+      const dataTotales = clavesBase.map(clave => (grupos[clave] ? grupos[clave].totalGanado : 0));
+      const metas = clavesBase.map(fecha => obtenerMetaDiaria(fecha));
+      const puntosEquilibrio = clavesBase.map(fecha => obtenerPuntoEquilibrioDiario(fecha));
+      const resumenCanales = clavesBase.map(clave => {
+        const porCanal = {};
+        const margenPorCanal = {};
+        if (grupos[clave]) {
+          (grupos[clave].ventas || []).forEach(item => {
+            const venta = item.venta;
+            const canal = canalDeVenta(venta.ubicacion_venta);
+            const monto = Number(venta.monto_total || 0);
+            porCanal[canal] = (porCanal[canal] || 0) + monto;
+            margenPorCanal[canal] = (margenPorCanal[canal] || 0) + (item.gananciaNetaCalculada || 0);
+          });
+        }
+        return { porCanal, margenPorCanal };
+      });
+      const colorEstado = colorEstadoDe(dataTotales, metas, puntosEquilibrio);
+      const canalSuperiorPorDia = canalSuperiorDe(resumenCanales);
+      const totalesPeriodo = { ventas: {}, margen: {} };
+      resumenCanales.forEach(r => CANALES_GRAFICO.forEach(canal => {
+        totalesPeriodo.ventas[canal.clave] = (totalesPeriodo.ventas[canal.clave] || 0) + (r.porCanal[canal.clave] || 0);
+        totalesPeriodo.margen[canal.clave] = (totalesPeriodo.margen[canal.clave] || 0) + (r.margenPorCanal[canal.clave] || 0);
+      }));
+
+      let datos = {
+        clavesOrdenadas: clavesBase, labels, dataTotales, metas, puntosEquilibrio,
+        resumenCanales, colorEstado, canalSuperiorPorDia, totalesPeriodo,
+        clavesDiaPorAgrupado: clavesBase
+      };
+
+      // Vista semanal: cada barra agrupa de lunes a domingo los días con ventas.
+      if (granularidadGrafico === 'semana' && clavesBase.length) {
+        const semanas = new Map();
+        clavesBase.forEach((clave, indice) => {
+          const semana = datosSemanaDe(clave);
+          if (!semanas.has(semana.clave)) {
+            semanas.set(semana.clave, {
+              etiqueta: semana.etiqueta, lunes: semana.lunes, ultima: clave, total: 0, metas: 0, equilibrio: 0, porCanal: {}, margenPorCanal: {}, totalesPorDia: {}
+            });
+          }
+          const grupo = semanas.get(semana.clave);
+          grupo.total += dataTotales[indice];
+          grupo.metas += metas[indice];
+          grupo.equilibrio += puntosEquilibrio[indice];
+          grupo.ultima = clave;
+          grupo.totalesPorDia[clave] = dataTotales[indice];
+          CANALES_GRAFICO.forEach(canal => {
+            grupo.porCanal[canal.clave] = (grupo.porCanal[canal.clave] || 0) + (resumenCanales[indice].porCanal[canal.clave] || 0);
+            grupo.margenPorCanal[canal.clave] = (grupo.margenPorCanal[canal.clave] || 0) + (resumenCanales[indice].margenPorCanal[canal.clave] || 0);
+          });
+        });
+        const clavesSemana = [...semanas.keys()].sort();
+        const resumenSemanal = clavesSemana.map(clave => semanas.get(clave));
+        // Desglose lunes a domingo para el tooltip de cada barra semanal.
+        const desgloseSemanas = resumenSemanal.map(semana => {
+          const dias = [];
+          for (let i = 0; i < 7; i++) {
+            const d = new Date(semana.lunes);
+            d.setUTCDate(semana.lunes.getUTCDate() + i);
+            const claveDia = d.toISOString().slice(0, 10);
+            dias.push({
+              etiqueta: DIAS_CORTOS[d.getUTCDay()] + ' ' + d.getUTCDate() + '/' + (d.getUTCMonth() + 1),
+              total: semana.totalesPorDia[claveDia] || 0
+            });
+          }
+          return dias;
+        });
+        datos = {
+          clavesOrdenadas: clavesSemana,
+          labels: resumenSemanal.map(s => s.etiqueta),
+          dataTotales: resumenSemanal.map(s => s.total),
+          metas: resumenSemanal.map(s => s.metas),
+          puntosEquilibrio: resumenSemanal.map(s => s.equilibrio),
+          resumenCanales: resumenSemanal.map(s => ({ porCanal: s.porCanal, margenPorCanal: s.margenPorCanal })),
+          colorEstado: null, canalSuperiorPorDia: null, totalesPeriodo,
+          clavesDiaPorAgrupado: resumenSemanal.map(s => s.ultima),
+          desgloseSemanas
+        };
+        datos.colorEstado = colorEstadoDe(datos.dataTotales, datos.metas, datos.puntosEquilibrio);
+        datos.canalSuperiorPorDia = canalSuperiorDe(datos.resumenCanales);
+      }
+      return datos;
+    }
+
+    function actualizarControlesGrafico(datos) {
+      const esUsuarioAdmin = esAdmin();
+      if (modoGrafico === 'margen' && !esUsuarioAdmin) modoGrafico = 'ventas';
+      // Un solo selector: sincroniza la opción con la vista actual y oculta
+      // las opciones de margen a quien no es admin.
+      const selector = document.getElementById('vistaGrafico');
+      if (selector) {
+        selector.querySelectorAll('option.opcion-admin').forEach(opcion => {
+          opcion.hidden = !esUsuarioAdmin;
+          opcion.disabled = !esUsuarioAdmin;
+        });
+        const claveVista = modoGrafico === 'ubicaciones' ? 'ubicaciones' : modoGrafico + '-' + granularidadGrafico;
+        selector.value = claveVista;
+        if (selector.value !== claveVista) selector.value = 'ventas-dia';
+      }
+      const aviso = document.getElementById('avisoClicGrafico');
+      if (aviso) {
+        aviso.classList.toggle('hidden', modoGrafico === 'ubicaciones');
+        aviso.textContent = granularidadGrafico === 'semana'
+          ? '👆 Toca una barra para ir al último día con ventas de esa semana'
+          : '👆 Toca una barra para abrir el cierre de caja de ese día';
+      }
+      const resumen = document.getElementById('resumenCanalesGrafico');
+      if (resumen) {
+        const campo = modoGrafico === 'margen' ? 'margen' : 'ventas';
+        const total = datos ? CANALES_GRAFICO.reduce((suma, canal) => suma + (datos.totalesPeriodo[campo][canal.clave] || 0), 0) : 0;
+        resumen.innerHTML = (datos && total > 0)
+          ? CANALES_GRAFICO.map(canal => {
+              const valor = datos.totalesPeriodo[campo][canal.clave] || 0;
+              const porcentaje = total > 0 ? Math.round(valor / total * 100) : 0;
+              return `<span style="color:${canal.color};">■</span> ${canal.clave}: <strong style="color:var(--ivory);">S/ ${valor.toFixed(2)}</strong> (${porcentaje}%)`;
+            }).join(' &nbsp;·&nbsp; ') + ` &nbsp;·&nbsp; <span style="color:var(--gold-light);">Total: <strong>S/ ${total.toFixed(2)}</strong></span>`
+          : 'Sin ventas en el período seleccionado.';
+      }
+    }
+
+    function dibujarGraficoVentas(datos) {
+      const ctx = document.getElementById('chartVentasDiarias');
+      if (!ctx || !datos) return;
+      const esUsuarioAdmin = esAdmin();
+      if (miGraficoVentas) { miGraficoVentas.destroy(); miGraficoVentas = null; }
+      ultimasClavesGrafico = datos.clavesDiaPorAgrupado;
+
+      const irADiaHistorial = (elementos) => {
+        const elemento = elementos && elementos[0];
+        if (!elemento) return;
+        const clave = ultimasClavesGrafico[elemento.index];
+        const contenido = clave && document.getElementById('content-' + clave);
+        if (contenido) {
+          contenido.classList.remove('hidden');
+          const flecha = document.getElementById('arrow-' + clave);
+          if (flecha) flecha.textContent = '▲';
+          contenido.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      };
+
+      if (modoGrafico === 'ubicaciones') {
+        // Vista resumen del período: una barra horizontal por ubicación.
+        miGraficoVentas = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: CANALES_GRAFICO.map(canal => canal.clave),
+            datasets: [{
+              label: 'Total del período (S/)',
+              data: CANALES_GRAFICO.map(canal => datos.totalesPeriodo.ventas[canal.clave] || 0),
+              backgroundColor: CANALES_GRAFICO.map(canal => canal.color),
+              borderRadius: 6,
+              margenes: CANALES_GRAFICO.map(canal => datos.totalesPeriodo.margen[canal.clave] || 0)
+            }]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    const monto = ` ${context.label}: S/ ${context.parsed.x.toFixed(2)}`;
+                    const margen = (context.dataset.margenes || [])[context.dataIndex] || 0;
+                    return esUsuarioAdmin ? `${monto} (margen: S/ ${margen.toFixed(2)})` : monto;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: { beginAtZero: true, ticks: { color: '#b8c6d5' }, grid: { color: 'rgba(246,240,231,0.08)' } },
+              y: { ticks: { color: '#b8c6d5' }, grid: { display: false } }
+            }
+          }
+        });
+        return;
+      }
+
+      const esMargen = modoGrafico === 'margen';
+      const campoCanal = esMargen ? 'margenPorCanal' : 'porCanal';
+      const datasets = CANALES_GRAFICO.map(canal => ({
+        type: 'bar',
+        label: canal.clave,
+        data: datos.resumenCanales.map(r => r[campoCanal][canal.clave] || 0),
+        backgroundColor: canal.color,
+        borderColor: datos.resumenCanales.map((r, indice) =>
+          datos.canalSuperiorPorDia[indice] === canal.clave ? datos.colorEstado[indice] : 'rgba(0,0,0,0)'),
+        borderWidth: 2,
+        borderRadius: 4,
+        stack: 'ventas'
+      }));
+      if (!esMargen) {
+        datasets.push({
+          type: 'line',
+          label: 'Punto de equilibrio (S/)',
+          data: datos.puntosEquilibrio,
+          borderColor: '#efc66e',
+          backgroundColor: '#efc66e',
+          borderWidth: 2,
+          borderDash: [6, 6],
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          tension: 0,
+          stack: 'equilibrio'
+        }, {
+          type: 'line',
+          label: 'Meta diaria (S/)',
+          data: datos.metas,
+          borderColor: '#85b88f',
+          backgroundColor: '#85b88f',
+          borderWidth: 2,
+          borderDash: [4, 4],
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          tension: 0,
+          stack: 'meta'
+        });
+      }
+
+      miGraficoVentas = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: datos.labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          onClick: (evento, elementos) => irADiaHistorial(elementos),
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: { color: '#b8c6d5', boxWidth: 14, padding: 14 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const d = context.dataset;
+                  if (d.label === 'Meta diaria (S/)') return ` Meta: S/ ${context.parsed.y.toFixed(2)}`;
+                  if (d.label === 'Punto de equilibrio (S/)') return ` Punto de equilibrio: S/ ${context.parsed.y.toFixed(2)}`;
+                  const monto = ` ${d.label}: S/ ${context.parsed.y.toFixed(2)}`;
+                  const margen = (d.margenes || [])[context.dataIndex] || 0;
+                  return esUsuarioAdmin ? `${monto} (margen: S/ ${margen.toFixed(2)})` : monto;
+                },
+                afterBody: function(items) {
+                  const indice = items[0]?.dataIndex;
+                  if (indice === undefined || indice === null) return [];
+                  if (granularidadGrafico === 'semana') {
+                    // Desglose lunes a domingo de la semana tocada.
+                    const desglose = (datos.desgloseSemanas || [])[indice] || [];
+                    return ['', ...desglose.map(dia => `${dia.etiqueta}: ${dia.total > 0 ? 'S/ ' + dia.total.toFixed(2) : '—'}`)];
+                  }
+                  if (esMargen) {
+                    const total = CANALES_GRAFICO.reduce((suma, canal) => suma + (datos.resumenCanales[indice].margenPorCanal[canal.clave] || 0), 0);
+                    return ['', `Margen del día: S/ ${total.toFixed(2)}`];
+                  }
+                  const total = CANALES_GRAFICO.reduce((suma, canal) => suma + (datos.resumenCanales[indice].porCanal[canal.clave] || 0), 0);
+                  const meta = datos.metas[indice];
+                  const estado = total >= meta ? '✔ Meta alcanzada' : `Falta S/ ${(meta - total).toFixed(2)} para la meta`;
+                  return ['', `Total del día: S/ ${total.toFixed(2)}`, estado];
+                }
+              }
+            },
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              stacked: true,
+              ticks: { color: '#b8c6d5' },
+              grid: { color: 'rgba(246,240,231,0.08)' }
+            },
+            x: {
+              stacked: true,
+              ticks: { color: '#b8c6d5' },
+              grid: { display: false }
+            }
+          }
+        }
+      });
+    }
+
+    function cambiarVistaGrafico(vista) {
+      // vista: 'ventas-dia' | 'ventas-semana' | 'margen-dia' | 'margen-semana' | 'ubicaciones'
+      const partes = String(vista || 'ventas-dia').split('-');
+      let modo = partes[0];
+      if (modo === 'margen' && !esAdmin()) modo = 'ventas';
+      if (!['ventas', 'margen', 'ubicaciones'].includes(modo)) modo = 'ventas';
+      modoGrafico = modo;
+      granularidadGrafico = partes[1] === 'semana' && modo !== 'ubicaciones' ? 'semana' : 'dia';
+      if (modo !== 'ubicaciones') {
+        // Reagrupa siempre los datos del período y redibuja.
+        ultimoDatosGrafico = construirDatosGrafico(ultimoGruposVentas);
+      } else if (!ultimoDatosGrafico) {
+        ultimoDatosGrafico = construirDatosGrafico(ultimoGruposVentas);
+      }
+      actualizarControlesGrafico(ultimoDatosGrafico);
+      actualizarTituloGrafico();
+      dibujarGraficoVentas(ultimoDatosGrafico);
+    }
+
+    function actualizarTituloGrafico() {
+      const txtTitulo = document.getElementById('txtTituloGrafico');
+      if (!txtTitulo) return;
+      const semanal = granularidadGrafico === 'semana';
+      txtTitulo.innerText = modoGrafico === 'margen'
+        ? (semanal ? '📈 Margen Semanal por Ubicación' : '📈 Margen Diario por Ubicación')
+        : modoGrafico === 'ubicaciones'
+          ? '🏪 Totales del Período por Ubicación'
+          : (semanal ? '📈 Ventas Semanales por Ubicación vs Meta' : '📈 Rendimiento Diario de Ventas vs Meta');
+    }
+
+    function renderizarGraficoVentas(grupos) {
       ultimoGruposVentas = grupos || {};
       const campoFechaMeta = document.getElementById('fechaMetaDiaria');
       if (campoFechaMeta && !campoFechaMeta.value) {
@@ -2806,93 +3230,14 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       }
 
       const esUsuarioAdmin = esAdmin();
-      const txtTitulo = document.getElementById('txtTituloGrafico');
       const controlesMetasAdmin = document.getElementById('controlesMetasAdmin');
       if (controlesMetasAdmin) controlesMetasAdmin.classList.toggle('hidden', !esUsuarioAdmin);
-      
-      if (txtTitulo) {
-        txtTitulo.innerText = '📈 Rendimiento Diario de Ventas vs Meta';
-      }
 
-      const clavesOrdenadas = Object.keys(grupos).sort();
-      const labels = clavesOrdenadas.map(c => grupos[c].etiquetaCorta);
-      const dataGanancias = clavesOrdenadas.map(c => grupos[c].totalGanado);
-      const metas = clavesOrdenadas.map(fecha => obtenerMetaDiaria(fecha));
-      const puntosEquilibrio = clavesOrdenadas.map(fecha => obtenerPuntoEquilibrioDiario(fecha));
+      actualizarTituloGrafico();
 
-      const coloresBarras = dataGanancias.map((valor, indice) => {
-        if (valor >= metas[indice]) return '#85b88f';
-        if (valor >= puntosEquilibrio[indice]) return '#f1c36d';
-        return '#d99076';
-      });
-
-      if (miGraficoVentas) {
-        miGraficoVentas.destroy();
-      }
-
-      miGraficoVentas = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Ventas Totales (S/)',
-            data: dataGanancias,
-            backgroundColor: coloresBarras,
-            borderColor: 'rgba(226, 177, 86, 0.6)',
-            borderWidth: 1,
-            borderRadius: 6
-          }, {
-            type: 'line',
-            label: 'Punto de equilibrio (S/)',
-            data: puntosEquilibrio,
-            borderColor: '#efc66e',
-            backgroundColor: '#efc66e',
-            borderWidth: 2,
-            borderDash: [6, 6],
-            pointRadius: 3,
-            pointHoverRadius: 5,
-            tension: 0
-          }, {
-            type: 'line',
-            label: 'Meta diaria (S/)',
-            data: metas,
-            borderColor: '#85b88f',
-            backgroundColor: '#85b88f',
-            borderWidth: 2,
-            borderDash: [4, 4],
-            pointRadius: 3,
-            pointHoverRadius: 5,
-            tension: 0
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  if (context.dataset.label === 'Meta diaria (S/)') return ` Meta: S/ ${context.parsed.y.toFixed(2)}`;
-                  if (context.dataset.label === 'Punto de equilibrio (S/)') return ` Punto de equilibrio: S/ ${context.parsed.y.toFixed(2)}`;
-                  return ` Ventas: S/ ${context.parsed.y.toFixed(2)}`;
-                }
-              }
-            },
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: { color: '#b8c6d5' },
-              grid: { color: 'rgba(246,240,231,0.08)' }
-            },
-            x: {
-              ticks: { color: '#b8c6d5' },
-              grid: { display: false }
-            }
-          }
-        }
-      });
+      ultimoDatosGrafico = construirDatosGrafico(ultimoGruposVentas);
+      actualizarControlesGrafico(ultimoDatosGrafico);
+      dibujarGraficoVentas(ultimoDatosGrafico);
     }
 
     function limpiarFiltroFechas() {

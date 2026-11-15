@@ -375,8 +375,6 @@
           <button type="button" class="btn-sec" onclick="limpiarFiltroFechas()">Limpiar fechas</button>
         </div>
 
-        <div id="resumenMasVendidos" class="chart-container" aria-live="polite"></div>
-
         <!-- GRÁFICO 1: DIARIO DE VENTAS -->
         <div class="chart-container">
           <h4 id="txtTituloGrafico" style="margin:0 0 10px; color:var(--gold-light); font-size:0.9rem; text-align:center;">📈 Rendimiento Diario vs Metas</h4>
@@ -390,6 +388,18 @@
             <button type="button" class="btn-sec" onclick="guardarPuntoEquilibrioDiario()">Guardar punto</button>
             <button type="button" class="btn-sec" onclick="quitarPuntoEquilibrioDiario()">Restablecer punto</button>
           </div>
+          <div class="grafico-controles" role="group" aria-label="Vista del gráfico de ventas">
+            <label for="vistaGrafico" style="align-self:center; font-size:0.75rem; color:var(--muted);">Ver:</label>
+            <select id="vistaGrafico" onchange="cambiarVistaGrafico(this.value)" style="max-width:280px;">
+              <option value="ventas-dia">💰 Ventas por día</option>
+              <option value="ventas-semana">🗓️ Ventas por semana</option>
+              <option value="margen-dia" class="opcion-admin">📈 Margen por día</option>
+              <option value="margen-semana" class="opcion-admin">📈 Margen por semana</option>
+              <option value="ubicaciones">🏪 Totales por ubicación</option>
+            </select>
+          </div>
+          <p id="resumenCanalesGrafico" role="status" aria-live="polite" style="margin:0 0 8px; text-align:center; font-size:0.75rem; color:var(--muted);"></p>
+          <p id="avisoClicGrafico" style="margin:0 0 8px; text-align:center; font-size:0.68rem; color:var(--muted);">👆 Toca una barra para abrir el cierre de caja de ese día</p>
           <canvas id="chartVentasDiarias" height="180"></canvas>
         </div>
 
@@ -404,6 +414,8 @@
           </div>
           <canvas id="chartVentasVendedor" height="180"></canvas>
         </div>
+
+        <div id="resumenMasVendidos" class="chart-container" aria-live="polite"></div>
 
         <h3 style="margin:20px 0 10px;">📋 Cierre Diario de Cajas</h3>
         <div id="listaVentas">Cargando historial...</div>
@@ -622,7 +634,7 @@
   <script src="ticket.js?v=catprinter-compacto-5"></script>
   <script src="../product-metadata.js"></script>
   <script src="../decant-pricing.js"></script>
-  <script src="app.js?v=caja-dia-4"></script>
+  <script src="app.js?v=vista-unica-11"></script>
 </body>
 </html>
 
