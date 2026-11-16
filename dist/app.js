@@ -10,6 +10,7 @@
   });
 
   const PRODUCT_METADATA = Object.freeze(window.ALPHA_PRODUCT_METADATA || {});
+  const PRODUCT_GENDER = Object.freeze(window.ALPHA_PRODUCT_GENDER || {});
   const STORAGE_KEY = 'alpha-store-bag-v1';
   const DECANT_SIZES = [
     ['3 ml', 'precio_decant_3ml'],
@@ -71,6 +72,7 @@
     filters: document.getElementById('filters'),
     search: document.getElementById('search'),
     category: document.getElementById('category-filter'),
+    gender: document.getElementById('gender-filter'),
     brand: document.getElementById('brand-filter'),
     priceMin: document.getElementById('price-min'),
     priceMax: document.getElementById('price-max'),
@@ -155,6 +157,7 @@
       description: saved.description || 'Descripción del producto pendiente de confirmar.',
       notes: saved.notes || null,
       use: Array.isArray(saved.use) ? saved.use : [],
+      gender: PRODUCT_GENDER[normalize(name)] || saved.gender || 'unisex',
       sourceName: saved.sourceName || '',
       sourceUrl: safeImageUrl(saved.sourceUrl)
     };
@@ -234,6 +237,11 @@
     })[category] || 'Categoría pendiente';
   }
 
+  // Etiqueta del público al que apunta la fragancia (hombre, mujer, unisex).
+  function genderLabel(gender) {
+    return ({ hombre: 'Hombre', mujer: 'Mujer', unisex: 'Unisex' })[gender] || 'Unisex';
+  }
+
   function buildProducts(rows) {
     const sealedGroups = new Map();
     const fragrances = new Map();
@@ -269,6 +277,7 @@
         description: metadata.description,
         notes: metadata.notes,
         use: metadata.use,
+        gender: metadata.gender,
         sourceName: metadata.sourceName,
         sourceUrl: metadata.sourceUrl,
         presentation: 'completo',
@@ -301,6 +310,7 @@
           description: metadata.description,
           notes: metadata.notes,
           use: metadata.use,
+          gender: metadata.gender,
           sourceName: metadata.sourceName,
           sourceUrl: metadata.sourceUrl,
           presentation: 'decant',
@@ -353,6 +363,7 @@
   function getFilteredProducts() {
     const query = normalize(elements.search.value);
     const category = elements.category.value;
+    const gender = elements.gender && elements.gender.value !== 'all' ? elements.gender.value : null;
     const brand = elements.brand.value === '' ? 'all' : elements.brand.value;
     const min = elements.priceMin.value === '' ? null : Number(elements.priceMin.value);
     const max = elements.priceMax.value === '' ? null : Number(elements.priceMax.value);
@@ -363,9 +374,11 @@
       : bases;
     // Categorías de momento de uso: filtra por el contexto dia/noche de cada perfume.
     const usageCategory = ['dia', 'noche'].includes(category);
-    const candidates = usageCategory
+    let candidates = usageCategory
       ? onlyFavorites.filter(product => (product.use || []).includes(category))
       : onlyFavorites;
+    // Separación por público: hombre, mujer o unisex.
+    if (gender) candidates = candidates.filter(product => (product.gender || 'unisex') === gender);
     return Core.filterProducts(candidates, { query, category: usageCategory ? 'all' : category, brand, presentation: 'all', min, max });
   }
 
@@ -456,8 +469,12 @@
     }
     const cardUsage = document.createElement('p');
     cardUsage.className = 'card-usage';
+    const genderIcons = { hombre: '♂', mujer: '♀', unisex: '♂♀' };
+    const genderChip = `<span class="usage-chip"><span aria-hidden="true">${genderIcons[product.gender] || '◇'}</span> ${escapeHTML(genderLabel(product.gender))}</span>`;
     if (product.use && product.use.length) {
-      cardUsage.innerHTML = usageChips(product.use);
+      cardUsage.innerHTML = genderChip + usageChips(product.use);
+    } else {
+      cardUsage.innerHTML = genderChip;
     }
     const price = document.createElement('p');
     price.className = 'product-price';
@@ -496,6 +513,7 @@
     const query = elements.search.value.trim();
     if (query) params.set('q', query);
     if (elements.category.value !== 'all') params.set('cat', elements.category.value);
+    if (elements.gender && elements.gender.value && elements.gender.value !== 'all') params.set('gen', elements.gender.value);
     if (elements.brand.value && elements.brand.value !== 'all') params.set('marca', elements.brand.value);
     if (favoritesOnly()) params.set('favs', '1');
     if (elements.priceMin.value) params.set('min', elements.priceMin.value);
@@ -509,6 +527,7 @@
       const params = new URLSearchParams(location.search);
       elements.search.value = params.get('q') || '';
       elements.category.value = ['all', 'arabes', 'disenador', 'dia', 'noche', 'sin-clasificar'].includes(params.get('cat')) ? params.get('cat') : 'all';
+      if (elements.gender) elements.gender.value = ['all', 'hombre', 'mujer', 'unisex'].includes(params.get('gen')) ? params.get('gen') : 'all';
       state.pendingBrand = params.get('marca') || '';
       if (params.get('favs') === '1') elements.favoritesToggle.setAttribute('aria-pressed', 'true');
       elements.priceMin.value = params.get('min') || '';
@@ -648,6 +667,7 @@
           <p class="detail-brand">${escapeHTML(product.brand)}</p>
           <p class="detail-description">${escapeHTML(product.description)}</p>
           <dl class="detail-facts">
+            <div><dt>Público</dt><dd>${escapeHTML(genderLabel(product.gender))}</dd></div>
             <div><dt>Presentación</dt><dd>${escapeHTML(product.presentationLabel)}</dd></div>
             <div><dt>Cantidad</dt><dd>${escapeHTML(product.size)}</dd></div>
             <div><dt>Precio</dt><dd>${escapeHTML(formatMoney(product.price))}</dd></div>
