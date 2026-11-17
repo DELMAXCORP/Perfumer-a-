@@ -139,6 +139,10 @@
       'Piña, iris, jengibre y ciprés', 'Coco y notas amaderadas', 'Haba tonka, sándalo, ámbar y ámbar gris', 'otono invierno noche'),
     'jean paul gaultier scandal le parfum': item('Jean Paul Gaultier', 'disenador', 'Fragrantica', 'https://www.fragrantica.com/perfume/Jean-Paul-Gaultier/Scandal-Le-Parfum-74914.html',
       'Jazmín', 'Caramelo y sal', 'Vainilla', 'otono invierno noche'),
+    // En el catálogo puede figurar como "SCANDAL POUR HOMME LE PARFUM"; es la versión
+    // masculina del Scandal (frasco negro con corona dorada, ámbar amaderado).
+    'jean paul gaultier scandal pour homme le parfum': item('Jean Paul Gaultier', 'disenador', 'Jean Paul Gaultier', 'https://www.jeanpaulgaultier.com/ww/en/p/range-scandal-pour-homme/scandal-pour-homme-le-parfum-eau-de-parfum-intense-000000000065182478',
+      'Geranio', 'Haba tonka', 'Sándalo', 'otono invierno dia noche'),
     'king of kings private blend chapter 1': item('King of Kings', 'arabes', 'Fragrantica', 'https://www.fragrantica.com/perfume/King-of-Kings/Chapter-I-102515.html',
       'Piña, ron blanco, coco, mango y bergamota', 'Leche de coco, notas marinas y flores blancas', 'Ámbar, almizcle, sándalo y vetiver', 'primavera verano dia'),
     'le vite est belle': item('Lancôme', 'disenador', 'Lancôme UK', 'https://www.lancome.co.uk/discover-lancome/a-guide-to-la-vie-est-belle-fragrance.html',
@@ -193,6 +197,7 @@
     'jean lowe vibe': 'hombre',
     'jean paul gaultier le beau le parfum': 'hombre',
     'jean paul gaultier scandal le parfum': 'mujer',
+    'jean paul gaultier scandal pour homme le parfum': 'hombre',
     'jean paul gutier ultra male': 'hombre',
     'king of kings private blend chapter 1': 'hombre',
     'khamrah clasico': 'unisex',
