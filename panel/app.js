@@ -64,7 +64,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       notasCierreCache = {}; carritoVenta = []; comprobanteBase64 = null; registroAsistenciaActivo = null;
       ultimaVentaTicket = null; ultimoTicketImpresion = null;
       if (intervalTimer) clearInterval(intervalTimer);
-      for (const id of ['listaVentas','listaAsistencia','tablaContactos','gridInventario','cierresInventarioPorUbicacion','eventosInventarioCierre','itemPerfume','statsContactos','resumenMasVendidos','contenidoDetalleInventario']) {
+      for (const id of ['listaVentas','listaAsistencia','tablaContactos','gridInventario','cierresInventarioPorUbicacion','eventosInventarioCierre','itemPerfume','listaInventarioVenta','resumenInventarioVenta','statsContactos','resumenMasVendidos','contenidoDetalleInventario']) {
         const element = document.getElementById(id);
         element?.replaceChildren();
         if (element?.dataset) delete element.dataset.alphaHtml;
@@ -77,6 +77,8 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       for (const id of ['metrTotal','metrBajo','metrAgotado']) document.getElementById(id).textContent = '0';
       document.getElementById('previewComprobanteContainer').classList.add('hidden');
       gruposAbiertosInventario = []; perfumesRegaloFiltrados = [];
+      inventarioVentaGrupos = []; grupoSeleccionadoVenta = null;
+      alertasInventarioActuales = []; ubicacionFiltroActual = null; categoriaFiltroActual = 'TODOS'; soloConStockInventario = false;
       edicionImagenProducto = null;
       for (const id of ['modalDetalleInventario','modalTrasladoStock','modalImagenProducto','modalRegaloPerfume']) document.getElementById(id)?.classList.add('hidden');
       avisoMetaVentasFecha = null; avisoJornadaMostradoId = null;
@@ -120,6 +122,8 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     const aperturasEnProceso = new Set();
     let gruposAbiertosInventario = [];
     let carritoVenta = [];
+    let inventarioVentaGrupos = [];
+    let grupoSeleccionadoVenta = null;
     let comprobanteBase64 = null;
     let listaVentasCache = [];
     let ultimaVentaTicket = null;
@@ -134,6 +138,9 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     let miGraficoVendedores = null;
 
     let categoriaFiltroActual = 'TODOS';
+    let ubicacionFiltroActual = null;
+    let soloConStockInventario = false;
+    let alertasInventarioActuales = [];
     let procesandoVenta = false;
     let perfumesRegaloFiltrados = [];
 
@@ -653,14 +660,24 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
 
     function filtrarCategoriaChip(cat, btnEl) {
       categoriaFiltroActual = cat;
-      document.querySelectorAll('.chip-btn').forEach(b => {
-        b.classList.remove('active');
-        b.setAttribute('aria-pressed', 'false');
-      });
       if (btnEl) {
         btnEl.classList.add('active');
         btnEl.setAttribute('aria-pressed', 'true');
       }
+      renderizarStock();
+    }
+
+    function alternarFiltroCategoria(cat) {
+      filtrarCategoriaChip(categoriaFiltroActual === cat ? 'TODOS' : cat);
+    }
+
+    function filtrarUbicacionChip(ubicacion) {
+      ubicacionFiltroActual = ubicacion || null;
+      renderizarStock();
+    }
+
+    function alternarSoloConStock() {
+      soloConStockInventario = !soloConStockInventario;
       renderizarStock();
     }
 
@@ -710,60 +727,151 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       const grupo = esGrupo ? gruposAbiertosInventario[referencia] : null;
       const producto = esGrupo ? grupo : listaProductos.find(item => Number(item.id) === Number(referencia));
       if (!producto) return;
+
+      const admin = esAdmin();
       const imagen = producto.imagen_url || IMG_DEFAULT;
       const abierto = Boolean(producto.esGrupoAbierto);
-      const porUbicacion = esGrupo ? producto.porUbicacion : Object.fromEntries(UBICACIONES_INVENTARIO.map(u => [u, { stock: producto.ubicacion_stock === u ? Number(producto.stock) || 0 : 0, ml: 0, filas: producto.ubicacion_stock === u ? [producto] : [] }]));
-      const unidades = esGrupo ? UBICACIONES_INVENTARIO.flatMap(u => porUbicacion[u].filas) : [producto];
-      let acciones = '';
+      const esEnvase = producto.tipo === 'Decant Vacío';
+      const esLiquido = abierto;
+      const estado = estadoInventario(producto);
+      const ubicacionBase = producto.ubicacion_stock || 'Tienda Local';
+      const porUbicacion = esGrupo
+        ? producto.porUbicacion
+        : Object.fromEntries(UBICACIONES_INVENTARIO.map(u => [u, {
+            stock: ubicacionBase === u ? Number(producto.stock) || 0 : 0,
+            ml: 0,
+            filas: ubicacionBase === u ? [producto] : []
+          }]));
+      const unidades = UBICACIONES_INVENTARIO.flatMap(u => porUbicacion[u].filas);
+      const filaReferencia = unidades[0];
+      const pvp = Number(producto.precio_sugerido || 0);
+      const totalUnidades = Math.max(0, Number(producto.stock) || 0);
+      const totalMl = Math.max(0, Number(producto.ml) || 0);
+      const tamano = producto.tamano || '100ml';
+      const etiquetaTipo = esEnvase ? 'Envase vacío' : abierto ? 'Abierto para decants' : 'Perfume sellado';
+      const resumenTotal = esLiquido
+        ? `${totalUnidades} ${totalUnidades === 1 ? 'frasco abierto' : 'frascos abiertos'} · ${Math.round(totalMl)} ml`
+        : `${totalUnidades} ${esEnvase ? (totalUnidades === 1 ? 'envase' : 'envases') : (totalUnidades === 1 ? 'unidad' : 'unidades')}`;
 
-      if (esAdmin()) {
-        if (abierto) acciones += `<button type="button" class="btn-del" onclick="eliminarUnPerfumeAbierto(${referencia})">🗑️ Eliminar 1 perfume abierto</button>`;
-
-        if (producto.tipo === 'Perfume Sellado') {
-          acciones += `<div class="inventory-location-actions">${unidades.map(fila => `
-            <section class="inventory-location-action">
-              <h4>${fila.ubicacion_stock || 'Tienda Local'} · ${fila.stock} ${fila.stock === 1 ? 'frasco' : 'frascos'}</h4>
+      // Cada fila es un lote real de la base de datos: las acciones usan fila.id,
+      // nunca un id inventado por el grupo (eso rompía las acciones de los abiertos).
+      const filaHtml = fila => {
+        const stockFila = Math.max(0, Number(fila.stock) || 0);
+        if (esLiquido) {
+          const ml = Math.max(0, Number(fila.ml_restantes ?? (stockFila * (parseInt(fila.tamano) || 100))) || 0);
+          return `
+            <div class="inventory-lot">
+              <div class="inventory-lot-head">
+                <strong>${stockFila} ${stockFila === 1 ? 'frasco abierto' : 'frascos abiertos'}</strong>
+                <span>${Math.round(ml)} ml restantes</span>
+              </div>
+              ${admin ? `<div class="inventory-lot-actions">
+                <button type="button" class="btn-add" onclick="agregarFrascoAbierto(${fila.id})">➕ Añadir 1 frasco</button>
+                <button type="button" class="btn-sec" onclick="editarProducto(${fila.id})">✏️ Editar</button>
+                <button type="button" class="btn-sec" onclick="editarAudioProducto(${fila.id})">🎵 ${fila.audio_url ? 'Cambiar audio' : 'Audio'}</button>
+                ${stockFila > 0 ? `<button type="button" class="btn-empty" onclick="marcarComoVacioPorId(${fila.id}, ${stockFila})">🚫 Marcar 1 menos</button>` : ''}
+                <button type="button" class="btn-del" onclick="eliminarProductoPorId(${fila.id})">🗑️ Eliminar esta fila</button>
+              </div>` : ''}
+            </div>`;
+        }
+        if (esEnvase) {
+          return `
+            <div class="inventory-lot">
+              <div class="inventory-lot-head">
+                <strong>${stockFila} ${stockFila === 1 ? 'envase' : 'envases'}</strong>
+                <span>Costo S/ ${Number(fila.precio || 0).toFixed(2)}</span>
+              </div>
+              ${admin ? `<div class="inventory-lot-actions">
+                <button type="button" class="btn-add" onclick="sumarStockOLote(${fila.id})">➕ Añadir lote de envases</button>
+                <button type="button" class="btn-sec" onclick="editarProducto(${fila.id})">✏️ Editar</button>
+                ${stockFila > 0 ? `<button type="button" class="btn-empty" onclick="marcarComoVacioPorId(${fila.id}, ${stockFila})">🚫 Marcar 1 menos</button>` : ''}
+                <button type="button" class="btn-del" onclick="eliminarProductoPorId(${fila.id})">🗑️ Eliminar producto</button>
+              </div>` : ''}
+            </div>`;
+        }
+        return `
+          <div class="inventory-lot">
+            <div class="inventory-lot-head">
+              <strong>${stockFila} ${stockFila === 1 ? 'frasco sellado' : 'frascos sellados'}</strong>
+              <span>Costo S/ ${Number(fila.precio || 0).toFixed(2)}</span>
+            </div>
+            ${admin ? `
               <p class="inventory-average-help">Registra la compra; el costo promedio se actualizará para el stock de esta ubicación.</p>
               <div class="inventory-purchase-fields">
                 <div><label for="modalAñadir-${fila.id}">Botellas compradas</label><input type="number" id="modalAñadir-${fila.id}" min="1" step="1" value="1" inputmode="numeric" required></div>
                 <div><label for="modalCosto-${fila.id}">Costo por botella (S/)</label><input type="number" id="modalCosto-${fila.id}" min="0" step="0.01" value="${Number(fila.precio || 0).toFixed(2)}" inputmode="decimal" required></div>
               </div>
               <button type="button" class="btn-add" onclick="agregarCantidadPerfumeSellado(${fila.id}, 'modalAñadir-${fila.id}', 'modalCosto-${fila.id}')">＋ Registrar compra</button>
-              <button type="button" class="btn-sec" onclick="editarPreciosDecant(${fila.id})">💰 Editar precios de decants</button>
-              <button type="button" class="btn-sec" onclick="editarProducto(${fila.id})">✏️ Editar producto</button>
-              <button type="button" class="btn-sec" onclick="editarAudioProducto(${fila.id})">🎵 ${fila.audio_url ? 'Cambiar audio' : 'Agregar audio'}</button>
-              ${Number(fila.stock) > 0 ? `<button type="button" class="btn-open" onclick="abrirPerfumeSellado(${fila.id})">🍾 Abrir para decant</button>` : ''}
-              <button type="button" class="btn-del" onclick="eliminarProductoPorId(${fila.id})">🗑️ Eliminar producto</button>
-            </section>`).join('')}</div>`;
-        } else {
-          acciones += `<div class="inventory-actions">
-            <button type="button" class="btn-sec" onclick="editarProducto(${producto.id})">✏️ Editar producto</button>
-            ${producto.tipo !== 'Decant Vacío' ? `<button type="button" class="btn-sec" onclick="editarAudioProducto(${producto.id})">🎵 ${producto.audio_url ? 'Cambiar audio' : 'Agregar audio'}</button>` : ''}
-            <button type="button" class="btn-add" onclick="sumarStockOLote(${producto.id})">➕ Añadir unidades / stock</button>
-            ${producto.tipo === 'Perfume Sellado' && producto.stock > 0 ? `<button type="button" class="btn-open" onclick="abrirPerfumeSellado(${producto.id})">🍾 Abrir para decant</button>` : ''}
-            ${producto.tipo !== 'Perfume Sellado' && producto.stock > 0 ? `<button type="button" class="btn-empty" onclick="marcarComoVacioPorId(${producto.id}, ${producto.stock})">🚫 Marcar 1 menos</button>` : ''}
-            <button type="button" class="btn-del" onclick="eliminarProductoPorId(${producto.id})">🗑️ Eliminar producto</button>
+              <div class="inventory-lot-actions">
+                <button type="button" class="btn-sec" onclick="editarProducto(${fila.id})">✏️ Editar este lote</button>
+                <button type="button" class="btn-sec" onclick="editarAudioProducto(${fila.id})">🎵 ${fila.audio_url ? 'Cambiar audio' : 'Audio'}</button>
+                ${stockFila > 0 ? `<button type="button" class="btn-open" onclick="abrirPerfumeSellado(${fila.id})">🍾 Abrir 1 para decant</button>` : ''}
+                <button type="button" class="btn-del" onclick="eliminarProductoPorId(${fila.id})">🗑️ Eliminar este lote</button>
+              </div>` : ''}
           </div>`;
-        }
-      }
+      };
+
+      const bloquesUbicacion = UBICACIONES_INVENTARIO.map(u => {
+        const datos = porUbicacion[u];
+        if (!datos || !datos.filas.length) return '';
+        const resumen = esLiquido
+          ? `${Math.round(Math.max(0, Number(datos.ml) || 0))} ml`
+          : `${Math.max(0, Number(datos.stock) || 0)} ${esEnvase ? 'envases' : (Number(datos.stock) === 1 ? 'frasco' : 'frascos')}`;
+        return `<section class="inventory-location-action inventory-modal-block">
+          <header class="inventory-modal-block-head">
+            <h4><span aria-hidden="true">${ICONOS_UBICACION[u]}</span> ${u}</h4>
+            <span>${resumen}</span>
+          </header>
+          ${datos.filas.map(filaHtml).join('')}
+        </section>`;
+      }).join('');
+
+      const accionesFragancia = [
+        admin && !esEnvase && filaReferencia ? `<button type="button" class="btn-sec" onclick="abrirModalImagenProducto(${filaReferencia.id})">🖼️ Cambiar imagen</button>` : '',
+        admin && producto.tipo === 'Perfume Sellado' && filaReferencia ? `<button type="button" class="btn-sec" onclick="editarPreciosDecant(${filaReferencia.id})">💰 Precios de decants</button>` : '',
+        admin && esGrupo && totalUnidades > 0 ? `<button type="button" class="btn-sec" onclick="cerrarModalInventario();moverPerfumeAbierto(${referencia})">↔️ Cambiar de ubicación</button>` : '',
+        admin && abierto ? `<button type="button" class="btn-del" onclick="eliminarUnPerfumeAbierto(${referencia})">🗑️ Eliminar 1 frasco abierto</button>` : ''
+      ].filter(Boolean).join('');
 
       const contenido = document.getElementById('contenidoDetalleInventario');
       contenido.innerHTML = `
         <div class="inventory-modal-head">
-          <img src="${imagen}" alt="${producto.nombre}" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'">
-          <div><p class="traslado-etiqueta">GESTIÓN DE INVENTARIO</p><h3 id="detalleInventarioTitulo">${producto.nombre}</h3><p>${abierto ? 'Perfume abierto para decants' : producto.tipo || ''} · ${producto.tamano || ''}</p></div>
+          <span class="inventory-modal-media">
+            <img src="${imagen}" alt="${escaparHTML(producto.nombre)}" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'">
+            ${estado.clave === 'ok' ? '' : `<span class="invc-badge ${estado.clave}">${estado.texto}</span>`}
+          </span>
+          <div class="inventory-modal-title">
+            <p class="traslado-etiqueta">GESTIÓN DE INVENTARIO</p>
+            <h3 id="detalleInventarioTitulo">${escaparHTML(producto.nombre)}</h3>
+            <p class="inventory-modal-sub">${etiquetaTipo} · ${escaparHTML(tamano)}</p>
+            <div class="inventory-modal-meta">
+              <span class="inventory-modal-pvp">${pvp > 0 ? `PVP S/ ${pvp.toFixed(2)}` : 'Sin PVP'}</span>
+              <span class="inventory-modal-total">${resumenTotal}</span>
+            </div>
+            ${estado.clave === 'bajo' ? `<p class="inventory-modal-alerta aviso">⚠️ Queda poco stock${esLiquido ? ` (${Math.round(estado.restante)} ml)` : ` (${estado.restante} ${estado.restante === 1 ? 'unidad' : 'unidades'})`}. Conviene reponer.</p>` : ''}
+            ${estado.clave === 'agotado' ? '<p class="inventory-modal-alerta peligro">⛔ Sin stock disponible. Registra una compra para reponer.</p>' : ''}
+          </div>
         </div>
-        ${esAdmin() && producto.tipo !== 'Decant Vacío' && unidades.length ? `<button type="button" class="btn-sec" onclick="abrirModalImagenProducto(${unidades[0].id})">🖼️ Cambiar imagen</button>` : ''}
+
         <div class="inventory-modal-counts">
-          ${UBICACIONES_INVENTARIO.map(u => `<div><span>${u}</span><strong>${porUbicacion[u].stock}</strong></div>`).join('')}
-          <div><span>Total</span><strong>${Number(producto.stock) || 0}</strong></div>
+          ${UBICACIONES_INVENTARIO.map(u => {
+            const valor = esLiquido
+              ? Math.round(Math.max(0, Number(porUbicacion[u].ml) || 0))
+              : Math.max(0, Number(porUbicacion[u].stock) || 0);
+            return `<div class="${valor > 0 ? 'con-stock' : ''}"><span>${ICONOS_UBICACION[u]} ${NOMBRES_CORTOS_UBICACION[u]}</span><strong>${valor}${esLiquido ? ' ml' : ''}</strong></div>`;
+          }).join('')}
+          <div class="total"><span>Total</span><strong>${esLiquido ? `${Math.round(totalMl)} ml` : totalUnidades}</strong></div>
         </div>
-        ${producto.tipo === 'Perfume Sellado' ? `<div class="sellado-precios"><strong>Perfume: S/ ${Number(producto.precio_sugerido || 0).toFixed(2)}</strong><span>Decants 3 ml: S/ ${Number(producto.precio_decant_3ml || 0).toFixed(2)} · 5 ml: S/ ${Number(producto.precio_decant_5ml || 0).toFixed(2)}</span><span>10 ml: S/ ${Number(producto.precio_decant_10ml || 0).toFixed(2)} · 30 ml: S/ ${Number(producto.precio_decant_30ml || 0).toFixed(2)}</span></div>` : ''}
-        ${abierto ? `<p class="inventory-remaining">Contenido restante: ${UBICACIONES_INVENTARIO.map(u => `${u}: ${porUbicacion[u].ml.toFixed(1)} ml`).join(' · ')}</p>` : ''}
-        ${esGrupo && producto.stock > 0 ? `<button type="button" class="btn-sec inventory-modal-wide-action" onclick="cerrarModalInventario();moverPerfumeAbierto(${referencia})">↔️ Cambiar ubicación</button>` : ''}
-        ${producto.tipo === 'Perfume Sellado' ? unidades.filter(fila => Number(fila.stock) > 0).map(fila => `<button type="button" class="btn-open" onclick="abrirPerfumeSellado(${fila.id})">🍾 Abrir 1 para decant · ${fila.ubicacion_stock || 'Tienda Local'}</button>`).join('') : ''}
-        ${esGrupo ? `<div class="inventory-location-actions">${UBICACIONES_INVENTARIO.map(u => `<section class="inventory-location-action"><h4>${u} · ${porUbicacion[u].stock} frascos</h4>${producto.esGrupoAbierto ? `<span>${porUbicacion[u].ml.toFixed(1)} ml restantes</span>` : ''}</section>`).join('')}</div>` : ''}
-        ${esAdmin() ? acciones : '<p class="inventory-readonly">Las acciones administrativas están disponibles para usuarios registrados según sus permisos.</p>'}
+
+        ${producto.tipo === 'Perfume Sellado' ? `<div class="sellado-precios"><strong>PVP del frasco: S/ ${pvp.toFixed(2)}</strong><span>Decants 3 ml: S/ ${Number(producto.precio_decant_3ml || 0).toFixed(2)} · 5 ml: S/ ${Number(producto.precio_decant_5ml || 0).toFixed(2)}</span><span>10 ml: S/ ${Number(producto.precio_decant_10ml || 0).toFixed(2)} · 30 ml: S/ ${Number(producto.precio_decant_30ml || 0).toFixed(2)}</span></div>` : ''}
+
+        ${accionesFragancia ? `<div class="inventory-modal-toolbar">${accionesFragancia}</div>` : ''}
+
+        ${bloquesUbicacion || '<p class="empty-msg">Este perfume no tiene filas de stock registradas.</p>'}
+
+        ${admin ? '' : '<p class="inventory-readonly">Solo lectura: las acciones de inventario están disponibles para administradores.</p>'}
+
+        <button type="button" class="btn-sec inventory-modal-cerrar" onclick="cerrarModalInventario()">Cerrar</button>
       `;
       document.getElementById('modalDetalleInventario').classList.remove('hidden');
     }
@@ -781,6 +889,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         let grupo = gruposAbiertos.get(clave);
         if (!grupo) {
           grupo = {
+            clave,
             esGrupoAbierto: producto.tipo === 'Perfume para Decant',
             tipo: producto.tipo,
             nombre: producto.nombre,
@@ -792,7 +901,8 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
             precio_decant_10ml: producto.precio_decant_10ml,
             precio_decant_30ml: producto.precio_decant_30ml,
             porUbicacion: Object.fromEntries(UBICACIONES_INVENTARIO.map(ubicacion => [ubicacion, { stock: 0, ml: 0, filas: [] }])),
-            stock: 0
+            stock: 0,
+            ml: 0
           };
           gruposAbiertos.set(clave, grupo);
           resultado.push(grupo);
@@ -804,92 +914,250 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         grupo.porUbicacion[ubicacion].ml += Math.max(0, ml);
         grupo.porUbicacion[ubicacion].filas.push(producto);
         grupo.stock += cantidadBotellas;
+        grupo.ml += Math.max(0, ml);
         return resultado;
       }, []);
+    }
+
+    // Umbrales de reposición: avisan antes de quedarse sin stock vendible.
+    // Un sellado con 2 o menos unidades, un frasco abierto con menos de 25 ml
+    // y una caja de envases con 5 o menos ya no alcanzan para la jornada.
+    const UMBRAL_BAJO_SELLADO = 2;
+    const UMBRAL_BAJO_ENVASE = 5;
+    const UMBRAL_BAJO_ML = 25;
+    const ICONOS_UBICACION = { 'Tienda Local': '🏠', 'Alpha Móvil': '🚐', 'Barbería': '💈' };
+    const NOMBRES_CORTOS_UBICACION = { 'Tienda Local': 'Local', 'Alpha Móvil': 'Móvil', 'Barbería': 'Barbería' };
+
+    function esLiquidoInventario(p) {
+      return p.esGrupoAbierto || p.tipo === 'Perfume para Decant';
+    }
+
+    function stockEnUbicacionInventario(p, ubicacion) {
+      if (p.porUbicacion) {
+        const datosUbicacion = p.porUbicacion[ubicacion];
+        if (!datosUbicacion) return 0;
+        return esLiquidoInventario(p) ? Number(datosUbicacion.ml) || 0 : Number(datosUbicacion.stock) || 0;
+      }
+      return (p.ubicacion_stock || 'Tienda Local') === ubicacion ? Number(p.stock) || 0 : 0;
+    }
+
+    function estadoInventario(p) {
+      if (esLiquidoInventario(p)) {
+        const ml = Math.max(0, Number(p.ml) || 0);
+        if (ml <= 0) return { clave: 'agotado', texto: 'Agotado', restante: 0 };
+        if (ml < UMBRAL_BAJO_ML) return { clave: 'bajo', texto: 'Por agotarse', restante: ml };
+        return { clave: 'ok', texto: 'Disponible', restante: ml };
+      }
+      const stock = Math.max(0, Number(p.stock) || 0);
+      const umbral = p.tipo === 'Decant Vacío' ? UMBRAL_BAJO_ENVASE : UMBRAL_BAJO_SELLADO;
+      if (stock <= 0) return { clave: 'agotado', texto: 'Agotado', restante: 0 };
+      if (stock <= umbral) return { clave: 'bajo', texto: 'Por agotarse', restante: stock };
+      return { clave: 'ok', texto: 'Disponible', restante: stock };
+    }
+
+    function detalleUbicacionesInventario(p) {
+      const esLiquido = esLiquidoInventario(p);
+      const partes = UBICACIONES_INVENTARIO
+        .map(u => ({ u, valor: stockEnUbicacionInventario(p, u) }))
+        .filter(({ valor }) => valor > 0)
+        .map(({ u, valor }) => `${ICONOS_UBICACION[u]} ${NOMBRES_CORTOS_UBICACION[u]} ${esLiquido ? `${Math.round(valor)} ml` : valor}`);
+      return partes.length ? partes.join(' · ') : 'Sin stock';
+    }
+
+    function renderizarAlertasInventario(productosAgrupados) {
+      const contenedor = document.getElementById('alertasInventario');
+      if (!contenedor) return;
+      alertasInventarioActuales = [];
+      const conEstado = productosAgrupados.map(p => ({ p, estado: estadoInventario(p) }));
+      const agotados = conEstado.filter(({ estado }) => estado.clave === 'agotado');
+      const bajos = conEstado.filter(({ estado }) => estado.clave === 'bajo')
+        .sort((a, b) => a.estado.restante - b.estado.restante);
+
+      if (!agotados.length && !bajos.length) {
+        contenedor.innerHTML = '<p class="inv-alerta-ok">✅ Todo el stock está en orden: no hay perfumes agotados ni por agotarse.</p>';
+        return;
+      }
+
+      const bloque = (lista, clase, filtro, icono, titulo) => {
+        if (!lista.length) return '';
+        const visibles = lista.slice(0, 3);
+        const base = alertasInventarioActuales.length;
+        visibles.forEach(({ p }) => alertasInventarioActuales.push(p));
+        const resto = lista.length - visibles.length;
+        const items = visibles.map(({ p, estado }, i) => `
+          <button type="button" class="inv-alerta-item" onclick="abrirAlertaInventario(${base + i})" title="Abrir gestión de ${escaparHTML(p.nombre)}">
+            <span class="inv-alerta-nombre">${escaparHTML(p.nombre)}${p.tamano ? ` <small>${escaparHTML(p.tamano)}</small>` : ''}</span>
+            <span class="inv-alerta-detalle">${detalleUbicacionesInventario(p)}${clase === 'aviso' ? ` · quedan ${esLiquidoInventario(p) ? `${Math.round(estado.restante)} ml` : estado.restante}` : ''}</span>
+          </button>`).join('');
+        return `<div class="inv-alerta-bloque ${clase}">
+          <button type="button" class="inv-alerta-cab" onclick="filtrarCategoriaChip('${filtro}')" title="Ver la lista completa">
+            <span aria-hidden="true">${icono}</span><strong>${titulo}</strong><b>${lista.length}</b>
+            <small>${resto > 0 ? `+${resto} más ›` : 'ver ›'}</small>
+          </button>
+          <div class="inv-alerta-lista">${items}</div>
+        </div>`;
+      };
+
+      contenedor.innerHTML = bloque(agotados, 'peligro', 'AGOTADO', '⛔', 'Agotados')
+        + bloque(bajos, 'aviso', 'BAJO', '⚠️', 'Por agotarse');
+    }
+
+    function renderizarChipsInventario(productosAgrupados) {
+      const mapa = { TODOS: 'chipTodos', SELLADO: 'chipSellado', DECANT: 'chipDecant', VACIO: 'chipVacio', BAJO: 'chipBajo', AGOTADO: 'chipAgotado' };
+      const etiquetas = { TODOS: '🌐 Todos', SELLADO: '🧴 Sellados', DECANT: '🧪 Abiertos p/ Decant', VACIO: '📦 Envases Vacíos', BAJO: '⚠️ Por agotarse', AGOTADO: '⛔ Agotados' };
+      const conteos = {
+        TODOS: productosAgrupados.length,
+        SELLADO: productosAgrupados.filter(p => p.tipo === 'Perfume Sellado').length,
+        DECANT: productosAgrupados.filter(p => p.tipo === 'Perfume para Decant').length,
+        VACIO: productosAgrupados.filter(p => p.tipo === 'Decant Vacío').length,
+        BAJO: productosAgrupados.filter(p => estadoInventario(p).clave === 'bajo').length,
+        AGOTADO: productosAgrupados.filter(p => estadoInventario(p).clave === 'agotado').length
+      };
+      Object.entries(mapa).forEach(([cat, id]) => {
+        const boton = document.getElementById(id);
+        if (!boton) return;
+        const activo = categoriaFiltroActual === cat;
+        boton.innerHTML = `${etiquetas[cat]} <b>${conteos[cat]}</b>`;
+        boton.classList.toggle('active', activo);
+        boton.setAttribute('aria-pressed', activo ? 'true' : 'false');
+      });
+      const contenedor = document.getElementById('chipsUbicacion');
+      if (!contenedor) return;
+      const botones = [`<button type="button" class="chip-ubicacion${!ubicacionFiltroActual && !soloConStockInventario ? ' active' : ''}" aria-pressed="${!ubicacionFiltroActual && !soloConStockInventario}" onclick="filtrarUbicacionChip(null)">🌐 Todas</button>`];
+      UBICACIONES_INVENTARIO.forEach(u => {
+        const disponibles = productosAgrupados.filter(p => stockEnUbicacionInventario(p, u) > 0).length;
+        const activo = ubicacionFiltroActual === u;
+        botones.push(`<button type="button" class="chip-ubicacion${activo ? ' active' : ''}" aria-pressed="${activo}" onclick="filtrarUbicacionChip('${u}')" title="Perfumes con stock en ${u}">${ICONOS_UBICACION[u]} ${NOMBRES_CORTOS_UBICACION[u]} <b>${disponibles}</b></button>`);
+      });
+      const disponiblesTotal = productosAgrupados.filter(p => estadoInventario(p).clave !== 'agotado').length;
+      botones.push(`<button type="button" class="chip-ubicacion chip-disponibles${soloConStockInventario ? ' active' : ''}" aria-pressed="${soloConStockInventario}" onclick="alternarSoloConStock()" title="Ocultar los que no tienen stock">✅ Con stock <b>${disponiblesTotal}</b></button>`);
+      contenedor.innerHTML = botones.join('');
+    }
+
+    function abrirAlertaInventario(indice) {
+      const objetivo = alertasInventarioActuales[indice];
+      if (!objetivo) return;
+      if (!objetivo.porUbicacion) return abrirModalInventario('producto', objetivo.id);
+      // Volvemos a la vista completa para localizar el grupo sin ambigüedad.
+      categoriaFiltroActual = 'TODOS';
+      ubicacionFiltroActual = null;
+      soloConStockInventario = false;
+      document.getElementById('inputBusqueda').value = '';
+      document.getElementById('ordenInventario').value = 'prioridad';
+      renderizarStock();
+      const grupoIdx = gruposAbiertosInventario.findIndex(g => g.clave === objetivo.clave);
+      if (grupoIdx >= 0) abrirModalInventario('grupo', grupoIdx);
+      else alert('Ese perfume ya no está en el inventario. Actualiza la lista e inténtalo de nuevo.');
     }
 
     function renderizarStock() {
       const query = normalizarTexto(document.getElementById('inputBusqueda').value.trim());
       const productosAgrupados = agruparProductosInventario(listaProductos);
+      const estados = new Map(productosAgrupados.map(p => [p, estadoInventario(p)]));
 
       document.getElementById('metrTotal').innerText = productosAgrupados.length;
-      document.getElementById('metrBajo').innerText = productosAgrupados.filter(p => Number(p.stock) > 0 && Number(p.stock) <= 4).length;
-      document.getElementById('metrAgotado').innerText = productosAgrupados.filter(p => Number(p.stock) <= 0).length;
+      document.getElementById('metrBajo').innerText = productosAgrupados.filter(p => estados.get(p).clave === 'bajo').length;
+      document.getElementById('metrAgotado').innerText = productosAgrupados.filter(p => estados.get(p).clave === 'agotado').length;
+
+      renderizarAlertasInventario(productosAgrupados);
+      renderizarChipsInventario(productosAgrupados);
 
       let filtrados = productosAgrupados.filter(p => normalizarTexto(String(p.nombre) + ' ' + String(p.tipo) + ' ' + String(p.tamano || '')).includes(query));
 
       if (categoriaFiltroActual === 'SELLADO') filtrados = filtrados.filter(p => p.tipo === 'Perfume Sellado');
       else if (categoriaFiltroActual === 'DECANT') filtrados = filtrados.filter(p => p.tipo === 'Perfume para Decant');
       else if (categoriaFiltroActual === 'VACIO') filtrados = filtrados.filter(p => p.tipo === 'Decant Vacío');
-      else if (categoriaFiltroActual === 'BAJO') filtrados = filtrados.filter(p => Number(p.stock) > 0 && Number(p.stock) <= 4);
-      else if (categoriaFiltroActual === 'AGOTADO') filtrados = filtrados.filter(p => Number(p.stock) <= 0);
+      else if (categoriaFiltroActual === 'BAJO') filtrados = filtrados.filter(p => estados.get(p).clave === 'bajo');
+      else if (categoriaFiltroActual === 'AGOTADO') filtrados = filtrados.filter(p => estados.get(p).clave === 'agotado');
+
+      if (ubicacionFiltroActual) filtrados = filtrados.filter(p => stockEnUbicacionInventario(p, ubicacionFiltroActual) > 0);
+      if (soloConStockInventario) filtrados = filtrados.filter(p => estados.get(p).clave !== 'agotado');
 
       const modoOrden = document.getElementById('ordenInventario').value;
+      const prioridadEstado = { agotado: 0, bajo: 1, ok: 2 };
+      const porNombre = (a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', { sensitivity: 'base' });
       filtrados.sort((a, b) => {
-        if (modoOrden === 'stock_asc') return Number(a.stock) - Number(b.stock);
-        if (modoOrden === 'stock_desc') return Number(b.stock) - Number(a.stock);
+        if (modoOrden === 'prioridad') return (prioridadEstado[estados.get(a).clave] - prioridadEstado[estados.get(b).clave]) || porNombre(a, b);
+        if (modoOrden === 'stock_asc') return (estados.get(a).restante - estados.get(b).restante) || porNombre(a, b);
+        if (modoOrden === 'stock_desc') return (estados.get(b).restante - estados.get(a).restante) || porNombre(a, b);
         if (modoOrden === 'precio_asc') return Number(a.precio_sugerido || 0) - Number(b.precio_sugerido || 0);
         if (modoOrden === 'precio_desc') return Number(b.precio_sugerido || 0) - Number(a.precio_sugerido || 0);
-        return String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', { sensitivity: 'base' });
+        return porNombre(a, b);
       });
       const contGrid = document.getElementById('gridInventario');
       if (!filtrados.length) {
         delete contGrid.dataset.alphaHtml;
-        contGrid.innerHTML = '<p class="empty-msg" style="grid-column: 1/-1; text-align:center; padding:20px;">No se encontraron productos en esta categoría.</p>';
+        const detalleFiltro = ubicacionFiltroActual ? ` en ${ubicacionFiltroActual}` : '';
+        contGrid.innerHTML = `<p class="empty-msg" style="grid-column: 1/-1; text-align:center; padding:20px;">No se encontraron productos${detalleFiltro} con este filtro.</p>`;
         return;
       }
 
       gruposAbiertosInventario = [];
       const stockHTML = filtrados.map(p => {
+        const estado = estados.get(p);
+        const esLiquido = esLiquidoInventario(p);
+        const precioSugerido = Number(p.precio_sugerido || 0);
+        const precioTexto = precioSugerido > 0 ? `PVP S/ ${precioSugerido.toFixed(2)}` : 'Sin PVP';
+
         if (p.esGrupoAbierto || p.tipo === 'Perfume Sellado') {
           const grupoIdx = gruposAbiertosInventario.push(p) - 1;
-          const agotado = p.stock <= 0;
+          const ubicaciones = estado.clave === 'agotado' ? '' : UBICACIONES_INVENTARIO.map(u => {
+            const datosUb = p.porUbicacion[u];
+            const valor = esLiquido ? Math.round(datosUb.ml) : datosUb.stock;
+            const conStock = valor > 0;
+            return `<span class="invc-ubicacion${conStock ? ' con-stock' : ''}" title="${u}: ${esLiquido ? `${valor} ml` : `${valor} unidades`}">
+              <span class="ico" aria-hidden="true">${ICONOS_UBICACION[u]}</span>
+              <b>${valor}${esLiquido ? ' ml' : ''}</b>
+              <small>${NOMBRES_CORTOS_UBICACION[u]}</small>
+            </span>`;
+          }).join('');
+          const badge = estado.clave === 'ok' ? '' : `<span class="invc-badge ${estado.clave}">${estado.texto}</span>`;
+          const resumen = estado.clave === 'agotado'
+            ? 'Sin stock en las 3 ubicaciones'
+            : esLiquido
+              ? `${p.stock} ${p.stock === 1 ? 'frasco abierto' : 'frascos abiertos'} · ${Math.round(p.ml)} ml`
+              : `${p.stock} ${p.stock === 1 ? 'unidad' : 'unidades'} en total`;
           return `
-            <button type="button" class="product-card inventory-product" onclick="abrirModalInventario('grupo', ${grupoIdx})" aria-label="Ver ${p.nombre} y administrar inventario">
-              <img width="360" height="360" class="inventory-card-image" src="${datos.thumbnail(p.imagen_url) || IMG_DEFAULT}" alt="${p.nombre}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'">
+            <button type="button" class="product-card inventory-product estado-${estado.clave}" onclick="abrirModalInventario('grupo', ${grupoIdx})" aria-label="Ver ${escaparHTML(p.nombre)} y administrar inventario. ${estado.texto}">
+              <span class="invc-imagen">
+                <img width="360" height="360" class="inventory-card-image" src="${datos.thumbnail(p.imagen_url) || IMG_DEFAULT}" alt="${escaparHTML(p.nombre)}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'">
+                ${badge}
+              </span>
               <span class="inventory-card-info">
-                <strong class="inventory-card-name">${p.nombre}</strong>
-                <span class="inventory-card-type">${p.esGrupoAbierto ? `Abierto · ${p.tamano}` : `Sellado · ${p.tamano}`}</span>
-                <span class="inventory-card-locations">${UBICACIONES_INVENTARIO.map(u => `<span>${u} <b>${p.porUbicacion[u].stock}</b></span>`).join('')}</span>
-                <span class="inventory-card-total">Total: ${p.stock} ${p.stock === 1 ? 'perfume' : 'perfumes'} <span>· Ver gestión ›</span></span>
+                <strong class="inventory-card-name">${escaparHTML(p.nombre)}</strong>
+                <span class="inventory-card-type">${p.esGrupoAbierto ? 'Abierto' : 'Sellado'} · ${escaparHTML(p.tamano)}</span>
+                <span class="invc-resumen${estado.clave === 'agotado' ? ' sin-stock' : ''}">${resumen}</span>
+                <span class="inventory-card-locations">${ubicaciones}</span>
+                <span class="inventory-card-total">${precioTexto} <span>Gestionar ›</span></span>
               </span>
             </button>
           `;
         }
-        let badgeClass = 'badge-ok';
-        let badgeText = `Stock: ${p.stock}`;
-        let barColor = 'var(--success)';
-        let pct = Math.min((p.stock / 10) * 100, 100);
 
-        if (p.stock === 0) {
-          badgeClass = 'badge-zero';
-          badgeText = 'AGOTADO';
-          barColor = 'var(--danger)';
-          pct = 100;
-        } else if (p.stock <= 4) {
-          badgeClass = 'badge-low';
-          badgeText = `Bajo: ${p.stock}`;
-          barColor = 'var(--warning)';
-        }
-
-        const tamanoPerfume = p.tamano || '100ml';
-        const mlBase = parseInt(tamanoPerfume) || 100;
-
-        let labelTipo = `SELLADO (${tamanoPerfume})`;
-        if (p.tipo === 'Perfume para Decant') labelTipo = `ABIERTO (${tamanoPerfume})`;
-        else if (p.tipo === 'Decant Vacío') labelTipo = `ENVASE (${p.tamano ? p.tamano : ''})`;
-
-        const costoBaseVal = parseFloat(p.precio || 0);
-        const precioSugeridoVal = parseFloat(p.precio_sugerido || 0);
-
+        const ubicaciones = estado.clave === 'agotado' ? '' : UBICACIONES_INVENTARIO.map(u => {
+          const valor = stockEnUbicacionInventario(p, u);
+          return `<span class="invc-ubicacion${valor > 0 ? ' con-stock' : ''}" title="${u}: ${valor} unidades">
+            <span class="ico" aria-hidden="true">${ICONOS_UBICACION[u]}</span>
+            <b>${valor}</b>
+            <small>${NOMBRES_CORTOS_UBICACION[u]}</small>
+          </span>`;
+        }).join('');
+        const badge = estado.clave === 'ok' ? '' : `<span class="invc-badge ${estado.clave}">${estado.texto}</span>`;
+        const resumenEnvase = estado.clave === 'agotado'
+          ? 'Sin stock en las 3 ubicaciones'
+          : `${p.stock} ${p.stock === 1 ? 'envase' : 'envases'} en total`;
         return `
-          <button type="button" class="product-card inventory-product" onclick="abrirModalInventario('producto', ${p.id})" aria-label="Ver ${p.nombre} y administrar inventario">
-            <img width="360" height="360" class="inventory-card-image" src="${datos.thumbnail(p.imagen_url) || IMG_DEFAULT}" alt="${p.nombre}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'">
+          <button type="button" class="product-card inventory-product estado-${estado.clave}" onclick="abrirModalInventario('producto', ${p.id})" aria-label="Ver ${escaparHTML(p.nombre)} y administrar inventario. ${estado.texto}">
+            <span class="invc-imagen">
+              <img width="360" height="360" class="inventory-card-image" src="${datos.thumbnail(p.imagen_url) || IMG_DEFAULT}" alt="${escaparHTML(p.nombre)}" loading="lazy" onerror="this.onerror=null;this.src='${IMG_DEFAULT}'">
+              ${badge}
+            </span>
             <span class="inventory-card-info">
-              <strong class="inventory-card-name">${p.nombre}</strong>
-              <span class="inventory-card-type">${labelTipo}</span>
-              <span class="inventory-card-locations">${UBICACIONES_INVENTARIO.map(u => `<span>${u} <b>${p.ubicacion_stock === u ? p.stock : 0}</b></span>`).join('')}</span>
-              <span class="inventory-card-total">Total: ${p.stock} ${p.stock === 1 ? 'unidad' : 'unidades'} <span>· Ver gestión ›</span></span>
+              <strong class="inventory-card-name">${escaparHTML(p.nombre)}</strong>
+              <span class="inventory-card-type">Envase · ${escaparHTML(p.tamano || '')}</span>
+              <span class="invc-resumen${estado.clave === 'agotado' ? ' sin-stock' : ''}">${resumenEnvase}</span>
+              <span class="inventory-card-locations">${ubicaciones}</span>
+              <span class="inventory-card-total">${precioTexto} <span>Gestionar ›</span></span>
             </span>
           </button>
         `;
@@ -1190,6 +1458,42 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         if (errorMovimiento) alert('El stock se actualizó, pero no se registró en el historial. Ejecuta database/inventario-movimientos.sql.');
         cargarTodo();
       }
+    }
+
+    // Suma un frasco abierto completo a una fila existente. A diferencia de
+    // sumarStockOLote, también incrementa los mililitros disponibles para que
+    // las alertas y el stock de decants sigan siendo exactos.
+    async function agregarFrascoAbierto(id) {
+      if (!esAdmin()) return alert('Acceso denegado: Solo los administradores pueden modificar el inventario.');
+      const producto = listaProductos.find(p => String(p.id) === String(id) && p.tipo === 'Perfume para Decant');
+      if (!producto) return alert('No se encontró el perfume abierto. Actualiza el inventario e inténtalo de nuevo.');
+
+      const mlPorFrasco = parseInt(producto.tamano) || 100;
+      const stockAnterior = Math.max(0, Number(producto.stock) || 0);
+      const mlAnterior = Math.max(0, Number(producto.ml_restantes ?? (stockAnterior * mlPorFrasco)) || 0);
+      const ubicacion = producto.ubicacion_stock || 'Tienda Local';
+      if (!confirm(`¿Agregar 1 frasco abierto de "${producto.nombre}" en ${ubicacion}?\n\nSe sumarán ${mlPorFrasco} ml al contenido disponible.`)) return;
+
+      const { error } = await client.from('productos').update({
+        stock: stockAnterior + 1,
+        ml_restantes: mlAnterior + mlPorFrasco
+      }).eq('id', id);
+      if (error) return alert('No se pudo agregar el frasco abierto: ' + error.message);
+
+      const errorMovimiento = await registrarMovimientoInventario({
+        producto_id: String(producto.id),
+        producto_nombre: producto.nombre,
+        producto_tipo: producto.tipo,
+        producto_tamano: producto.tamano,
+        tipo_movimiento: 'compra',
+        cantidad: 1,
+        ubicacion_destino: ubicacion,
+        costo_unitario: Number(producto.precio) || 0,
+        costo_total: Number(producto.precio) || 0
+      });
+      if (errorMovimiento) alert('El frasco se agregó, pero no se registró en el historial de inventario. Ejecuta database/inventario-movimientos.sql.');
+      else alert(`Se agregó 1 frasco abierto de "${producto.nombre}" en ${ubicacion}. Ahora hay ${Math.round(mlAnterior + mlPorFrasco)} ml disponibles.`);
+      cargarTodo();
     }
 
     async function agregarCantidadPerfumeSellado(id, campoId = `cantidadAgregarSellado-${id}`, costoId = null) {
@@ -1586,37 +1890,253 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
 
     function actualizarOpcionesVenta() {
+      grupoSeleccionadoVenta = null;
       filtrarPerfumesVenta();
     }
 
-    function filtrarPerfumesVenta() {
-      const itemTipoVal = document.getElementById('itemTipo').value;
-      const query = document.getElementById('itemBuscador').value.toLowerCase().trim();
-      const isDecant = itemTipoVal === 'Decant';
-      const esPerfumeAbierto = itemTipoVal === 'Perfume Abierto';
-      const esEnvaseVacio = itemTipoVal === 'Decant Vacío';
-      
-      document.getElementById('grpTamano').classList.toggle('hidden', !isDecant);
-      
-      const tipo = (isDecant || esPerfumeAbierto) ? 'Perfume para Decant' : (esEnvaseVacio ? 'Decant Vacío' : 'Perfume Sellado');
-      const ubicacion = document.getElementById('vtaCanal').value;
-      const filtrados = listaProductos.filter(p => p.tipo === tipo && p.stock > 0 && p.nombre.toLowerCase().includes(query) && (esEnvaseVacio || (p.ubicacion_stock || 'Tienda Local') === ubicacion));
-      
-      const selectPerfume = document.getElementById('itemPerfume');
-      const perfumeSeleccionado = selectPerfume.value;
-      const productoAnterior = listaProductos.find(p => String(p.id) === String(perfumeSeleccionado));
-      if (filtrados.length === 0) {
-        selectPerfume.innerHTML = `<option value="">${(isDecant || esPerfumeAbierto) ? 'Sin perfumes abiertos' : (esEnvaseVacio ? 'Sin decants vacíos' : 'Sin perfumes sellados')}${esEnvaseVacio ? '' : ` con stock en ${ubicacion}`}</option>`;
-      } else {
-        selectPerfume.innerHTML = filtrados.map(p => `<option value="${p.id}">${p.nombre} [${p.tamano || '100ml'}] (Stock: ${p.stock})</option>`).join('');
-        const mismoPerfume = productoAnterior && filtrados.find(p =>
-          p.nombre.trim().toLocaleLowerCase() === productoAnterior.nombre.trim().toLocaleLowerCase()
-          && (p.tamano || '100ml') === (productoAnterior.tamano || '100ml'));
-        if (mismoPerfume) selectPerfume.value = String(mismoPerfume.id);
-        else if (filtrados.some(p => String(p.id) === String(perfumeSeleccionado))) selectPerfume.value = perfumeSeleccionado;
+    // --- Inventario de la pestaña Vender ---
+    // Una fila por perfume (agrupando sus lotes) con el stock visible en cada ubicación,
+    // para elegir de un toque desde dónde se vende sin adivinar dónde está el frasco.
+    function mlVentaDisponible(producto) {
+      const ml = producto.ml_restantes ?? ((Number(producto.stock) || 0) * (parseInt(producto.tamano) || 100));
+      return Math.max(0, Number(ml) || 0);
+    }
+
+    function stockVentaDisponible(producto) {
+      if (producto.tipo === 'Perfume para Decant') return mlVentaDisponible(producto) > 0;
+      return (Number(producto.stock) || 0) > 0;
+    }
+
+    function claveInventarioVenta(producto) {
+      const nombre = normalizarTexto(producto.nombre).replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/[^a-z0-9]/g, '');
+      const capacidad = parseInt(String(producto.tamano || '').replace(/[^0-9]/g, ''), 10) || 100;
+      return `${producto.tipo}|${nombre}|${capacidad}`;
+    }
+
+    function contextoInventarioVenta() {
+      const modo = document.getElementById('itemTipo').value || 'Perfume Sellado';
+      return {
+        modo,
+        tipo: (modo === 'Decant' || modo === 'Perfume Abierto') ? 'Perfume para Decant' : (modo === 'Decant Vacío' ? 'Decant Vacío' : 'Perfume Sellado'),
+        esEnvase: modo === 'Decant Vacío',
+        esLiquido: modo === 'Decant' || modo === 'Perfume Abierto',
+        ubicacion: document.getElementById('vtaCanal').value
+      };
+    }
+
+    function agruparInventarioVenta(ctx) {
+      const query = normalizarTexto(document.getElementById('itemBuscador').value).replace(/\s+/g, ' ').trim();
+      const grupos = new Map();
+      listaProductos.forEach(producto => {
+        if (producto.tipo !== ctx.tipo || !stockVentaDisponible(producto)) return;
+        if (query && !normalizarTexto(producto.nombre).includes(query)) return;
+        const clave = claveInventarioVenta(producto);
+        if (!grupos.has(clave)) {
+          grupos.set(clave, {
+            clave,
+            nombre: String(producto.nombre || '').trim(),
+            tamano: producto.tamano || '100ml',
+            filas: [],
+            porUbicacion: {},
+            stock: 0,
+            ml: 0
+          });
+        }
+        const grupo = grupos.get(clave);
+        const ubicacion = UBICACIONES_INVENTARIO.includes(producto.ubicacion_stock) ? producto.ubicacion_stock : 'Tienda Local';
+        const datosUbicacion = grupo.porUbicacion[ubicacion] || (grupo.porUbicacion[ubicacion] = { stock: 0, ml: 0, filas: [] });
+        const cantidad = Number(producto.stock) || 0;
+        datosUbicacion.stock += cantidad;
+        datosUbicacion.ml += mlVentaDisponible(producto);
+        datosUbicacion.filas.push(producto);
+        grupo.filas.push(producto);
+        grupo.stock += cantidad;
+        grupo.ml += mlVentaDisponible(producto);
+      });
+      // Primero los que sí tienen stock en el punto de venta elegido; luego, alfabético.
+      const prioridad = grupo => (grupo.porUbicacion[ctx.ubicacion]?.filas.length ? 0 : 1);
+      return [...grupos.values()].sort((a, b) => {
+        const diferencia = prioridad(a) - prioridad(b);
+        if (diferencia) return diferencia;
+        if (ctx.esEnvase) return (parseInt(a.tamano) || 0) - (parseInt(b.tamano) || 0);
+        return a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
+      });
+    }
+
+    function filaVentaParaGrupo(grupo, ubicacion) {
+      const filas = grupo?.porUbicacion?.[ubicacion]?.filas || [];
+      return filas.slice().sort((a, b) => mlVentaDisponible(b) - mlVentaDisponible(a))[0] || null;
+    }
+
+    function descripcionStockVenta(grupo, ctx) {
+      const tamanoEnNombre = normalizarTexto(grupo.nombre).includes(normalizarTexto(grupo.tamano));
+      const prefijo = tamanoEnNombre ? '' : `${grupo.tamano} · `;
+      if (ctx.esLiquido) {
+        return `${prefijo}${grupo.stock} ${grupo.stock === 1 ? 'frasco abierto' : 'frascos abiertos'} · ${Math.round(grupo.ml)} ml`;
+      }
+      if (ctx.esEnvase) return `${prefijo}${grupo.stock} ${grupo.stock === 1 ? 'envase' : 'envases'} en total`;
+      return `${prefijo}${grupo.stock} ${grupo.stock === 1 ? 'unidad' : 'unidades'} en total`;
+    }
+
+    function renderizarResumenInventarioVenta(ctx) {
+      const contenedor = document.getElementById('resumenInventarioVenta');
+      if (!contenedor) return;
+      const iconos = { 'Tienda Local': '🏠', 'Alpha Móvil': '🚐', 'Barbería': '💈' };
+      const totales = Object.fromEntries(UBICACIONES_INVENTARIO.map(u => [u, { stock: 0, ml: 0 }]));
+      inventarioVentaGrupos.forEach(grupo => UBICACIONES_INVENTARIO.forEach(u => {
+        const datosUbicacion = grupo.porUbicacion[u];
+        if (!datosUbicacion) return;
+        totales[u].stock += datosUbicacion.stock;
+        totales[u].ml += datosUbicacion.ml;
+      }));
+      contenedor.innerHTML = UBICACIONES_INVENTARIO.map(u => {
+        const total = totales[u];
+        const detalle = total.stock === 0
+          ? 'Sin stock'
+          : ctx.modo === 'Decant'
+            ? `${total.stock} fr. · ${Math.round(total.ml)} ml`
+            : ctx.modo === 'Perfume Abierto'
+              ? `${total.stock} ${total.stock === 1 ? 'frasco' : 'frascos'}`
+              : `${total.stock} ${total.stock === 1 ? 'unidad' : 'unidades'}`;
+        const sinStock = total.stock === 0;
+        return `<button type="button" class="invv-resumen-chip${ctx.ubicacion === u ? ' activo' : ''}${sinStock ? ' sin-stock' : ''}"
+          ${sinStock && ctx.ubicacion !== u ? 'disabled' : ''}
+          onclick="elegirCanalVenta('${u}')" title="${sinStock ? u + ': sin stock' : 'Vender desde ' + u}">
+          <span class="ico" aria-hidden="true">${iconos[u]}</span>
+          <span class="txt"><strong>${u}</strong><small>${detalle}</small></span>
+        </button>`;
+      }).join('');
+    }
+
+    function renderizarListaInventarioVenta(ctx) {
+      const contenedor = document.getElementById('listaInventarioVenta');
+      const aviso = document.getElementById('inventarioVentaVacio');
+      const conteo = document.getElementById('conteoInventarioVenta');
+      if (!contenedor) return;
+      const iconos = { 'Tienda Local': '🏠', 'Alpha Móvil': '🚐', 'Barbería': '💈' };
+      const etiquetas = { 'Tienda Local': 'Local', 'Alpha Móvil': 'Móvil', 'Barbería': 'Barbería' };
+      const nombresTipo = {
+        'Perfume Sellado': 'perfumes sellados',
+        'Perfume para Decant': ctx.modo === 'Decant' ? 'frascos para decantar' : 'frascos abiertos',
+        'Decant Vacío': 'envases vacíos'
+      };
+      if (conteo) conteo.textContent = `${inventarioVentaGrupos.length} ${inventarioVentaGrupos.length === 1 ? 'perfume' : 'perfumes'}`;
+
+      if (!inventarioVentaGrupos.length) {
+        contenedor.innerHTML = '';
+        if (aviso) {
+          aviso.classList.remove('hidden');
+          aviso.textContent = `No hay ${nombresTipo[ctx.tipo]} disponibles${ctx.esEnvase ? '' : ' con ese filtro'}.`;
+        }
+        return;
       }
 
+      const hayEnCanal = inventarioVentaGrupos.some(grupo => filaVentaParaGrupo(grupo, ctx.ubicacion));
+      if (aviso) {
+        if (hayEnCanal) aviso.classList.add('hidden');
+        else {
+          aviso.classList.remove('hidden');
+          aviso.innerHTML = `No hay ${nombresTipo[ctx.tipo]} en <strong>${escaparHTML(ctx.ubicacion)}</strong>. Toca la ubicación con stock en la lista para vender desde ahí.`;
+        }
+      }
+
+      contenedor.innerHTML = inventarioVentaGrupos.map((grupo, indice) => {
+        const activo = grupo.clave === grupoSeleccionadoVenta;
+        const ubicaciones = UBICACIONES_INVENTARIO.map(u => {
+          const datosUbicacion = grupo.porUbicacion[u];
+          const cantidad = datosUbicacion ? datosUbicacion.stock : 0;
+          const clases = ['invv-ubicacion'];
+          if (ctx.ubicacion === u) clases.push('activa');
+          if (!cantidad) clases.push('vacia');
+          const contenido = `<span class="ico" aria-hidden="true">${iconos[u]}</span><span class="lbl">${etiquetas[u]}</span><b>${cantidad}</b>`;
+          if (!cantidad) return `<span class="${clases.join(' ')}" title="${u}: sin stock" aria-label="${u}: sin stock">${contenido}</span>`;
+          return `<button type="button" class="${clases.join(' ')}" title="Vender desde ${u} (${cantidad} ${cantidad === 1 ? 'disponible' : 'disponibles'})"
+            aria-label="Vender desde ${u}: ${cantidad} ${cantidad === 1 ? 'disponible' : 'disponibles'}" onclick="event.stopPropagation(); seleccionarPerfumeVenta(${indice}, '${u}')">${contenido}</button>`;
+        }).join('');
+        return `<div class="invv-item${activo ? ' activo' : ''}">
+          <button type="button" class="invv-item-info" onclick="seleccionarPerfumeVenta(${indice})"
+            aria-label="Elegir ${escaparHTML(grupo.nombre)} para la venta">
+            <strong>${escaparHTML(grupo.nombre)}</strong>
+            <small>${escaparHTML(descripcionStockVenta(grupo, ctx))}</small>
+          </button>
+          <div class="invv-ubicaciones">${ubicaciones}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function aplicarSeleccionInventarioVenta(ctx) {
+      const select = document.getElementById('itemPerfume');
+      if (!select) return;
+      const filaConMasStock = grupo => grupo.filas.slice().sort((a, b) => (Number(b.stock) || 0) - (Number(a.stock) || 0))[0] || null;
+      let grupo = inventarioVentaGrupos.find(g => g.clave === grupoSeleccionadoVenta) || null;
+      let fila = null;
+      if (grupo) fila = ctx.esEnvase ? filaConMasStock(grupo) : filaVentaParaGrupo(grupo, ctx.ubicacion);
+      if (!fila) {
+        grupo = inventarioVentaGrupos.find(g => ctx.esEnvase ? g.filas.length : filaVentaParaGrupo(g, ctx.ubicacion)) || null;
+        fila = grupo ? (ctx.esEnvase ? filaConMasStock(grupo) : filaVentaParaGrupo(grupo, ctx.ubicacion)) : null;
+      }
+      grupoSeleccionadoVenta = grupo && fila ? grupo.clave : null;
+      if (!fila) {
+        select.innerHTML = `<option value="">Sin stock${ctx.esEnvase ? '' : ' en ' + escaparHTML(ctx.ubicacion)}</option>`;
+        select.value = '';
+        return;
+      }
+      const ubicacionFila = ctx.esEnvase ? (fila.ubicacion_stock || 'Tienda Local') : ctx.ubicacion;
+      select.innerHTML = `<option value="${fila.id}">${escaparHTML(fila.nombre)} [${escaparHTML(fila.tamano || '100ml')}] · ${escaparHTML(ubicacionFila)}</option>`;
+      select.value = String(fila.id);
+    }
+
+    function filtrarPerfumesVenta() {
+      const ctx = contextoInventarioVenta();
+      document.getElementById('grpTamano').classList.toggle('hidden', ctx.modo !== 'Decant');
+
+      inventarioVentaGrupos = agruparInventarioVenta(ctx);
+      aplicarSeleccionInventarioVenta(ctx);
+      renderizarResumenInventarioVenta(ctx);
+      renderizarListaInventarioVenta(ctx);
       mostrarPreviewPerfumeVenta();
+    }
+
+    function carritoCompatibleConCanal(canal) {
+      return !carritoVenta.some(item => {
+        const producto = listaProductos.find(p => String(p.id) === String(item.producto_id));
+        const ubicacionItem = item.ubicacion_stock || producto?.ubicacion_stock || 'Tienda Local';
+        return ubicacionItem !== canal;
+      });
+    }
+
+    function elegirCanalVenta(ubicacion) {
+      const campo = document.getElementById('vtaCanal');
+      if (!UBICACIONES_INVENTARIO.includes(ubicacion) || campo.value === ubicacion) return;
+      if (!carritoCompatibleConCanal(ubicacion)) {
+        return alert('Para cambiar la ubicación de la venta, primero retira del carrito los productos agregados desde la otra ubicación.');
+      }
+      campo.value = ubicacion;
+      grupoSeleccionadoVenta = null;
+      filtrarPerfumesVenta();
+      guardarBorradorVenta();
+    }
+
+    function seleccionarPerfumeVenta(indice, ubicacionElegida) {
+      const grupo = inventarioVentaGrupos[indice];
+      if (!grupo) return;
+      const ctx = contextoInventarioVenta();
+      const campo = document.getElementById('vtaCanal');
+      let destino = ubicacionElegida || campo.value;
+      if (!filaVentaParaGrupo(grupo, destino)) {
+        destino = UBICACIONES_INVENTARIO.find(u => filaVentaParaGrupo(grupo, u));
+        if (!destino) return;
+      }
+      // Los envases vacíos no dependen de la ubicación: no cambiamos el punto de venta.
+      if (destino !== campo.value && !ctx.esEnvase) {
+        if (!carritoCompatibleConCanal(destino)) {
+          return alert(`Ese perfume solo tiene stock en ${destino}. Retira del carrito los productos de otra ubicación para venderlo desde ahí.`);
+        }
+        campo.value = destino;
+        guardarBorradorVenta();
+      }
+      grupoSeleccionadoVenta = grupo.clave;
+      filtrarPerfumesVenta();
     }
 
     function buscarEnvaseDecantDisponible(tamano, inventario = listaProductos) {
@@ -1715,7 +2235,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         document.getElementById('prevNombre').innerText = `${perfume.nombre} (${tipoVenta === 'Decant' ? tamanoDecant : (perfume.tamano || '100ml')})`;
         const stockLabel = tipoVenta === 'Decant' || tipoVenta === 'Perfume Abierto'
           ? `${Number(perfume.ml_restantes ?? (perfume.stock * (parseInt(perfume.tamano) || 100))).toFixed(1)} ml restantes · ${perfume.ubicacion_stock || 'Tienda Local'}`
-          : `${perfume.stock} unidades`;
+          : `${perfume.stock} ${Number(perfume.stock) === 1 ? 'unidad' : 'unidades'} en ${perfume.ubicacion_stock || 'Tienda Local'}`;
         document.getElementById('prevStock').innerText = `Stock disponible: ${stockLabel} | PVP Sugerido: S/ ${precioAuto.toFixed(2)}`;
         document.getElementById('prevImg').src = perfume.imagen_url || IMG_DEFAULT;
         cardPreview.classList.remove('hidden');
@@ -2479,17 +2999,13 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       campo.addEventListener('input', guardarBorradorVenta);
       campo.addEventListener('change', () => {
         if (id === 'vtaCanal') {
-          const cambioIncompatible = carritoVenta.some(item => {
-            const producto = listaProductos.find(p => String(p.id) === String(item.producto_id));
-            const ubicacionItem = item.ubicacion_stock || producto?.ubicacion_stock || 'Tienda Local';
-            return ubicacionItem !== campo.value;
-          });
-          if (cambioIncompatible) {
+          if (!carritoCompatibleConCanal(campo.value)) {
             const primerItem = carritoVenta[0];
             const producto = listaProductos.find(p => String(p.id) === String(primerItem.producto_id));
             campo.value = primerItem.ubicacion_stock || producto?.ubicacion_stock || 'Tienda Local';
             alert('Para cambiar la ubicación de la venta, primero retira del carrito los productos agregados desde la otra ubicación.');
           } else {
+            grupoSeleccionadoVenta = null;
             filtrarPerfumesVenta();
           }
         }

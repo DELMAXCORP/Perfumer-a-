@@ -448,3 +448,171 @@
 .grafico-controles .btn-sec { padding: 6px 12px; font-size: 0.75rem; width: auto; }
 .grafico-controles .btn-sec.activo { background: var(--gold); color: #16202b; border-color: var(--gold); font-weight: 700; }
 .grafico-controles select { padding: 6px 10px; font-size: 0.78rem; border-radius: 8px; border: 1px solid var(--gold); background: var(--night); color: var(--ivory); font: inherit; }
+
+/* Vender: inventario compacto con stock visible en cada ubicacion */
+.invv-resumen { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.invv-resumen-chip { display:flex; align-items:center; gap:7px; width:100%; margin:0; padding:8px 9px; border:1px solid rgba(241,195,109,.22); border-radius:10px; background:rgba(2,19,38,.45); color:var(--ivory); text-align:left; font:inherit; }
+.invv-resumen-chip:hover { border-color:var(--gold); filter:none; transform:none; }
+.invv-resumen-chip.activo { border-color:var(--gold-light); background:rgba(201,144,54,.16); box-shadow:0 0 0 2px rgba(201,144,54,.14); }
+.invv-resumen-chip.sin-stock { opacity:.55; }
+.invv-resumen-chip:disabled { opacity:.5; cursor:not-allowed; filter:none; transform:none; }
+.invv-resumen-chip .ico { font-size:1.05rem; line-height:1; }
+.invv-resumen-chip .txt { display:flex; flex-direction:column; gap:1px; min-width:0; }
+.invv-resumen-chip .txt strong { color:var(--ivory); font-size:.72rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.invv-resumen-chip.activo .txt strong { color:var(--gold-light); }
+.invv-resumen-chip .txt small { color:var(--muted); font-size:.66rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.invv-cabecera { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:6px; }
+.invv-cabecera > span { color:var(--muted); font-size:.7rem; }
+.invv-aviso { margin:0 0 7px; padding:7px 9px; border:1px dashed rgba(241,195,109,.35); border-radius:8px; background:rgba(201,144,54,.08); color:var(--gold-light); font-size:.73rem; line-height:1.35; }
+.invv-lista { display:flex; flex-direction:column; gap:5px; max-height:320px; overflow-y:auto; padding:5px; border:1px solid rgba(246,240,231,.12); border-radius:10px; background:rgba(2,19,38,.35); }
+.invv-item { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px; padding:7px 9px; border:1px solid rgba(246,240,231,.07); border-radius:8px; background:rgba(6,38,71,.55); }
+.invv-item:hover { border-color:rgba(201,144,54,.6); background:rgba(201,144,54,.08); }
+.invv-item.activo { border-color:var(--gold); background:rgba(201,144,54,.15); box-shadow:inset 3px 0 0 var(--gold-light); }
+.invv-item-info { display:flex; flex-direction:column; gap:2px; min-width:0; width:100%; margin:0; padding:0; border:0; border-radius:0; background:transparent; color:inherit; text-align:left; cursor:pointer; font:inherit; }
+.invv-item-info:hover { filter:none; transform:none; }
+.invv-item-info strong { color:var(--ivory); font-size:.8rem; font-weight:700; line-height:1.25; overflow-wrap:anywhere; }
+.invv-item-info small { color:var(--muted); font-size:.66rem; line-height:1.25; }
+.invv-ubicaciones { display:flex; gap:4px; }
+.invv-ubicacion { display:flex; flex-direction:column; align-items:center; gap:0; width:auto; min-width:50px; margin:0; padding:3px 5px; border:1px solid rgba(246,240,231,.16); border-radius:8px; background:rgba(2,19,38,.62); color:var(--ivory); font:inherit; line-height:1.1; cursor:pointer; }
+.invv-ubicacion:hover { border-color:var(--gold); filter:none; transform:none; }
+.invv-ubicacion .ico { font-size:.7rem; }
+.invv-ubicacion .lbl { color:var(--muted); font-size:.53rem; font-weight:500; letter-spacing:.02em; text-transform:uppercase; }
+.invv-ubicacion b { color:var(--ivory); font-size:.8rem; }
+.invv-ubicacion.activa { border-color:var(--gold-light); background:rgba(201,144,54,.22); }
+.invv-ubicacion.activa .lbl, .invv-ubicacion.activa b { color:var(--gold-light); }
+.invv-ubicacion.vacia { opacity:.35; cursor:default; }
+.invv-ubicacion.vacia:hover { border-color:rgba(246,240,231,.16); }
+@media (max-width:560px) {
+  .invv-resumen { grid-template-columns:1fr; gap:5px; }
+  .invv-resumen-chip { padding:6px 9px; }
+  .invv-item { grid-template-columns:1fr; gap:5px; }
+  .invv-ubicaciones { justify-content:stretch; }
+  .invv-ubicacion { flex:1; min-width:0; flex-direction:row; justify-content:center; gap:4px; padding:5px 4px; }
+  .invv-ubicacion .lbl { font-size:.6rem; }
+  .invv-lista { max-height:290px; }
+}
+
+
+/* Inventario: alertas de reposicion, resumen accionable y tarjetas compactas */
+.inv-alertas { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:0 0 10px; }
+.inv-alertas:empty { display:none; }
+.inv-alerta-ok { grid-column:1 / -1; margin:0; padding:9px 11px; border:1px solid rgba(133,184,143,.35); border-radius:9px; background:rgba(46,160,90,.1); color:#a3e6af; font-size:.76rem; }
+.inv-alerta-bloque { padding:8px 9px; border:1px solid; border-radius:10px; }
+.inv-alerta-bloque.peligro { border-color:rgba(217,144,118,.45); background:rgba(217,144,118,.09); }
+.inv-alerta-bloque.aviso { border-color:rgba(241,195,109,.42); background:rgba(241,195,109,.08); }
+.inv-alerta-cab { display:flex; align-items:center; gap:6px; width:100%; margin:0; padding:0; border:0; background:transparent; color:var(--ivory); font:inherit; text-align:left; cursor:pointer; }
+.inv-alerta-cab:hover { filter:none; transform:none; }
+.inv-alerta-cab strong { font-size:.78rem; }
+.inv-alerta-cab b { padding:1px 7px; border-radius:999px; background:rgba(0,0,0,.4); font-size:.72rem; }
+.inv-alerta-cab small { margin-left:auto; color:var(--muted); font-size:.64rem; }
+.inv-alerta-lista { display:flex; flex-direction:column; gap:3px; margin-top:6px; }
+.inv-alerta-item { display:flex; flex-direction:column; gap:1px; width:100%; margin:0; padding:4px 6px; border:0; border-radius:6px; background:rgba(2,19,38,.4); color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.inv-alerta-item:hover { background:rgba(201,144,54,.16); filter:none; transform:none; }
+.inv-alerta-nombre { color:var(--ivory); font-size:.72rem; font-weight:600; }
+.inv-alerta-nombre small { color:var(--muted); font-weight:400; }
+.inv-alerta-detalle { color:var(--muted); font-size:.63rem; line-height:1.3; }
+
+.inv-summary-card { display:block; width:100%; margin:0; appearance:none; font:inherit; color:inherit; cursor:pointer; }
+.inv-summary-card:hover { border-color:var(--gold-light); filter:none; transform:none; }
+.inv-summary-card small { display:block; margin-top:2px; color:var(--muted); font-size:.62rem; }
+
+.inv-ubicacion-chips { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; }
+.chip-ubicacion { display:inline-flex; align-items:center; gap:4px; width:auto; margin:0; padding:5px 10px; border:1px solid rgba(246,240,231,.16); border-radius:999px; background:rgba(2,19,38,.55); color:var(--ivory); font:inherit; font-size:.7rem; cursor:pointer; }
+.chip-ubicacion:hover { border-color:var(--gold); filter:none; transform:none; }
+.chip-ubicacion b { color:var(--gold-light); font-size:.68rem; }
+.chip-ubicacion.active { border-color:var(--gold); background:rgba(201,144,54,.2); font-weight:700; }
+
+.inv-grid { grid-template-columns:repeat(auto-fill,minmax(196px,1fr)); }
+.inventory-card-image { height:150px; padding:6px; }
+.invc-imagen { position:relative; display:block; }
+.invc-badge { position:absolute; top:7px; left:7px; padding:3px 8px; border:1px solid; border-radius:999px; font-size:.58rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; background:rgba(2,19,38,.9); }
+.invc-badge.agotado { color:#ffb399; border-color:#d99076; background:rgba(122,32,20,.85); }
+.invc-badge.bajo { color:#f1c36d; border-color:#f1c36d; background:rgba(120,82,10,.85); }
+.invc-badge.ok { color:#a3e6af; border-color:rgba(133,184,143,.65); background:rgba(20,70,40,.8); }
+.inventory-product.estado-agotado { border-color:rgba(217,144,118,.5); }
+.inventory-product.estado-bajo { border-color:rgba(241,195,109,.45); }
+.invc-resumen { color:var(--gold-light); font-size:.7rem; font-weight:600; }
+.inventory-card-locations { display:flex; gap:4px; }
+.inventory-card-locations .invc-ubicacion { flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; gap:1px; padding:5px 2px; border:1px solid rgba(246,240,231,.1); border-radius:7px; background:rgba(2,19,38,.4); color:var(--muted); text-align:center; }
+.inventory-card-locations .invc-ubicacion.con-stock { border-color:rgba(133,184,143,.4); background:rgba(46,160,90,.13); }
+.inventory-card-locations .ico { font-size:.72rem; line-height:1; }
+.inventory-card-locations b { color:var(--muted); font-size:.74rem; line-height:1.1; font-weight:700; white-space:nowrap; }
+.inventory-card-locations .con-stock b { color:var(--ivory); }
+.inventory-card-locations small { max-width:100%; color:var(--muted); font-size:.54rem; line-height:1.1; text-transform:uppercase; letter-spacing:.02em; overflow:hidden; text-overflow:ellipsis; }
+.inventory-card-total { align-items:center; font-size:.72rem; }
+.inventory-card-total > span { font-size:.68rem; }
+
+@media (max-width:640px) {
+  .inv-alertas { grid-template-columns:1fr; }
+  .invc-badge { font-size:.54rem; padding:2px 6px; }
+}
+@media (max-width:420px) {
+  .inv-grid { grid-template-columns:1fr 1fr; }
+  .inventory-card-image { height:112px; }
+  .inventory-card-name { font-size:.82rem; }
+  .inventory-card-locations .ico { font-size:.64rem; }
+  .inventory-card-locations b { font-size:.68rem; }
+  .inventory-card-locations small { font-size:.5rem; }
+}
+
+
+.invc-sin-stock { flex:1 1 100%; padding:5px 7px; border:1px dashed rgba(217,144,118,.4); border-radius:7px; background:rgba(217,144,118,.08); color:#ffb399; font-size:.64rem; text-align:center; }
+.chip-btn b { font-size:.68rem; opacity:.85; }
+.chip-btn.active b { opacity:1; }
+.chip-disponibles b { color:var(--gold-light); }
+
+
+/* Resumen compacto: una sola franja de cifras accionables */
+.inv-summary-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-bottom:8px; }
+.inv-summary-card { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; min-height:38px; padding:5px 8px; margin:0; appearance:none; font:inherit; color:inherit; text-align:center; cursor:pointer; }
+.inv-summary-card h5 { margin:0; font-size:.66rem; letter-spacing:.03em; white-space:nowrap; }
+.inv-summary-card .val { margin:0; font-size:.94rem; }
+.inv-summary-card small { display:none; }
+.inv-summary-card:hover { border-color:var(--gold-light); }
+@media (max-width:420px) {
+  .inv-summary-card { flex-direction:column; gap:0; min-height:44px; padding:4px 3px; }
+  .inv-summary-card h5 { font-size:.58rem; white-space:normal; line-height:1.1; }
+  .inv-summary-card .val { font-size:.86rem; }
+}
+
+.invc-resumen.sin-stock { color:#ffb399; font-weight:500; }
+
+/* Gestión de inventario: cabecera clara, resumen por ubicación y lotes accionables */
+.inventory-modal-head { align-items:start; }
+.inventory-modal-media { position:relative; display:block; }
+.inventory-modal-media img { display:block; width:150px; height:150px; object-fit:contain; border:1px solid var(--border); border-radius:12px; background:rgba(2,19,38,.55); }
+.inventory-modal-media .invc-badge { top:8px; left:8px; }
+.inventory-modal-title { min-width:0; }
+.inventory-modal-title h3 { margin:2px 0 4px; }
+.inventory-modal-sub { margin:0 0 8px; color:var(--muted); font-size:.8rem; }
+.inventory-modal-meta { display:flex; flex-wrap:wrap; gap:6px; }
+.inventory-modal-pvp,.inventory-modal-total { padding:4px 9px; border:1px solid var(--border); border-radius:999px; background:rgba(2,19,38,.45); color:var(--gold-light); font-size:.74rem; font-weight:600; }
+.inventory-modal-total { color:var(--ivory); }
+.inventory-modal-alerta { margin:8px 0 0; padding:6px 9px; border-radius:8px; font-size:.74rem; line-height:1.35; }
+.inventory-modal-alerta.aviso { border:1px solid rgba(241,195,109,.45); background:rgba(241,195,109,.1); color:#f1c36d; }
+.inventory-modal-alerta.peligro { border:1px solid rgba(217,144,118,.5); background:rgba(217,144,118,.12); color:#ffb399; }
+.inventory-modal-counts { grid-template-columns:repeat(auto-fit,minmax(74px,1fr)); }
+.inventory-modal-counts > div.con-stock { border-color:rgba(133,184,143,.45); background:rgba(46,160,90,.12); }
+.inventory-modal-counts > div.con-stock strong { color:var(--ivory); }
+.inventory-modal-counts > div.total { border-color:rgba(201,144,54,.5); background:rgba(201,144,54,.12); }
+.inventory-modal-toolbar { display:flex; flex-wrap:wrap; gap:7px; margin:0 0 12px; }
+.inventory-modal-toolbar button { width:auto; flex:1 1 150px; min-height:40px; margin:0; padding:8px 10px; font-size:.78rem; line-height:1.25; white-space:normal; }
+.inventory-modal-block { display:flex; flex-direction:column; gap:8px; }
+.inventory-modal-block-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding-bottom:6px; border-bottom:1px solid rgba(246,240,231,.1); }
+.inventory-modal-block-head h4 { grid-column:auto; margin:0; font-size:.86rem; }
+.inventory-modal-block-head > span { color:var(--gold-light); font-size:.76rem; font-weight:600; white-space:nowrap; }
+.inventory-lot { display:flex; flex-direction:column; gap:7px; padding:9px; border:1px solid rgba(246,240,231,.1); border-radius:9px; background:rgba(2,19,38,.4); }
+.inventory-lot-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.inventory-lot-head strong { color:var(--ivory); font-size:.8rem; }
+.inventory-lot-head span { color:var(--gold-light); font-size:.72rem; white-space:nowrap; }
+.inventory-lot .inventory-purchase-fields { grid-column:auto; }
+.inventory-lot > .btn-add { grid-column:auto; }
+.inventory-lot-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.inventory-lot-actions button { width:auto; flex:1 1 140px; min-height:38px; margin:0; padding:7px 9px; font-size:.76rem; line-height:1.2; }
+@media (max-width:640px) {
+  .inventory-modal-media img { width:100px; height:110px; }
+  .inventory-modal-toolbar button,.inventory-lot-actions button { flex:1 1 100%; }
+  .inventory-lot { padding:8px; }
+  .inventory-lot-head { flex-wrap:wrap; gap:2px; }
+}
+.inventory-modal-cerrar { width:100%; margin:14px 0 0; min-height:42px; }

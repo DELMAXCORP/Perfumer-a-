@@ -21,7 +21,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=inventario-gestion-3">
 </head>
 <body>
   <main class="app-shell">
@@ -117,7 +117,7 @@
               </select>
             </div>
             <div class="form-group">
-              <label>¿Dónde se vendió? (de aquí se descontará el stock)</label>
+              <label>Punto de venta (descuenta stock de aquí)</label>
               <select id="vtaCanal">
                 <option value="Alpha Móvil" selected>Alpha Móvil</option>
                 <option value="Tienda Local">Tienda Local</option>
@@ -126,16 +126,27 @@
             </div>
           </div>
 
+          <!-- INVENTARIO POR UBICACIÓN: stock visible de Tienda Local, Alpha Móvil y Barbería -->
           <div class="form-group">
-            <label>Buscar producto</label>
+            <label>Stock por punto de venta</label>
+            <div id="resumenInventarioVenta" class="invv-resumen"></div>
+          </div>
+
+          <div class="form-group">
+            <label>Buscar perfume</label>
             <div class="search-box" style="margin:0;">
-              <input type="text" id="itemBuscador" placeholder="Escribe el nombre..." oninput="filtrarPerfumesVenta()">
+              <input type="text" id="itemBuscador" placeholder="Escribe el nombre o la marca..." oninput="filtrarPerfumesVenta()">
             </div>
           </div>
 
           <div class="form-group">
-            <label>Seleccionar producto disponible</label>
-            <select id="itemPerfume" onchange="mostrarPreviewPerfumeVenta()"></select>
+            <div class="invv-cabecera">
+              <label style="margin:0;">Perfumes disponibles</label>
+              <span id="conteoInventarioVenta" aria-live="polite"></span>
+            </div>
+            <p id="inventarioVentaVacio" class="invv-aviso hidden"></p>
+            <div id="listaInventarioVenta" class="invv-lista" role="group" aria-label="Perfumes disponibles con su stock por ubicación"></div>
+            <select id="itemPerfume" class="hidden" tabindex="-1" aria-hidden="true" onchange="mostrarPreviewPerfumeVenta()"></select>
           </div>
 
           <div id="previewPerfumeVenta" class="preview-card hidden">
@@ -319,19 +330,25 @@
 
         <div class="inventory-heading"><div><h3>📦 Catálogo e Inventario</h3><span>Control rápido de stock, ubicación y precios</span></div><button type="button" id="btnAbrirCrearProducto" class="btn-add hidden" onclick="abrirModalCrearProducto()">＋ Añadir nuevo producto</button></div>
 
+        <!-- ALERTAS: perfumes agotados y por agotarse, con acceso directo a su gestión -->
+        <div id="alertasInventario" class="inv-alertas" aria-live="polite"></div>
+
         <div class="inv-summary-grid">
-          <div class="inv-summary-card">
-            <h5>Total Ítems</h5>
+          <button type="button" class="inv-summary-card" onclick="alternarFiltroCategoria('TODOS')" title="Ver todo el inventario">
+            <h5>Ítems</h5>
             <div class="val" id="metrTotal">0</div>
-          </div>
-          <div class="inv-summary-card">
-            <h5>Stock Bajo</h5>
+            <small>en catálogo</small>
+          </button>
+          <button type="button" class="inv-summary-card" onclick="alternarFiltroCategoria('BAJO')" title="Ver solo lo que está por agotarse">
+            <h5>Por agotarse</h5>
             <div class="val" id="metrBajo" style="color:var(--warning);">0</div>
-          </div>
-          <div class="inv-summary-card">
+            <small>reponer pronto</small>
+          </button>
+          <button type="button" class="inv-summary-card" onclick="alternarFiltroCategoria('AGOTADO')" title="Ver solo lo agotado">
             <h5>Agotados</h5>
             <div class="val" id="metrAgotado" style="color:var(--danger);">0</div>
-          </div>
+            <small>sin unidades</small>
+          </button>
         </div>
         
         <div class="inventory-toolbar">
@@ -341,7 +358,8 @@
           <div class="inventory-sort">
             <label for="ordenInventario">Ordenar</label>
             <select id="ordenInventario" onchange="filtrarInventario()">
-              <option value="nombre">Nombre (A–Z)</option>
+              <option value="prioridad">Prioridad (alertas primero)</option>
+              <option value="nombre" selected>Nombre (A–Z)</option>
               <option value="stock_asc">Menor stock</option>
               <option value="stock_desc">Mayor stock</option>
               <option value="precio_asc">Menor precio</option>
@@ -351,13 +369,15 @@
         </div>
 
         <div class="inv-filter-chips">
-          <button class="chip-btn active" onclick="filtrarCategoriaChip('TODOS', this)">🌐 Todos</button>
-          <button class="chip-btn" onclick="filtrarCategoriaChip('SELLADO', this)">🧴 Sellados</button>
-          <button class="chip-btn" onclick="filtrarCategoriaChip('DECANT', this)">🧪 Abiertos p/ Decant</button>
-          <button class="chip-btn" onclick="filtrarCategoriaChip('VACIO', this)">📦 Envases Vacíos</button>
-          <button type="button" class="chip-btn" onclick="filtrarCategoriaChip('BAJO', this)">⚠️ Stock bajo</button>
-          <button type="button" class="chip-btn" onclick="filtrarCategoriaChip('AGOTADO', this)">⛔ Agotados</button>
+          <button type="button" id="chipTodos" class="chip-btn active" aria-pressed="true" onclick="filtrarCategoriaChip('TODOS', this)">🌐 Todos</button>
+          <button type="button" id="chipSellado" class="chip-btn" aria-pressed="false" onclick="filtrarCategoriaChip('SELLADO', this)">🧴 Sellados</button>
+          <button type="button" id="chipDecant" class="chip-btn" aria-pressed="false" onclick="filtrarCategoriaChip('DECANT', this)">🧪 Abiertos p/ Decant</button>
+          <button type="button" id="chipVacio" class="chip-btn" aria-pressed="false" onclick="filtrarCategoriaChip('VACIO', this)">📦 Envases Vacíos</button>
+          <button type="button" id="chipBajo" class="chip-btn" aria-pressed="false" onclick="filtrarCategoriaChip('BAJO', this)">⚠️ Por agotarse</button>
+          <button type="button" id="chipAgotado" class="chip-btn" aria-pressed="false" onclick="filtrarCategoriaChip('AGOTADO', this)">⛔ Agotados</button>
         </div>
+
+        <div class="inv-ubicacion-chips" id="chipsUbicacion" role="group" aria-label="Filtrar inventario por ubicación"></div>
 
         <div id="gridInventario" class="inv-grid">Cargando catálogo...</div>
       </div>
@@ -634,7 +654,7 @@
   <script src="ticket.js?v=catprinter-compacto-5"></script>
   <script src="../product-metadata.js"></script>
   <script src="../decant-pricing.js"></script>
-  <script src="app.js?v=vista-unica-11"></script>
+  <script src="app.js?v=inventario-gestion-3"></script>
 </body>
 </html>
 

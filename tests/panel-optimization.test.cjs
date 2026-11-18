@@ -260,4 +260,62 @@ test('doble envío simultáneo del formulario no duplica venta ni descuento', as
   assert.equal(p.tables.productos[0].stock,2);
 });
 
+test('alertas de inventario: por agotarse y agotado según tipo y mililitros', async () => {
+  const p = panel();
+  const estados = await p.run(`[
+    estadoInventario({ tipo:'Perfume Sellado', stock:2 }).clave,
+    estadoInventario({ tipo:'Perfume Sellado', stock:3 }).clave,
+    estadoInventario({ tipo:'Perfume Sellado', stock:0 }).clave,
+    estadoInventario({ tipo:'Decant Vacío', stock:5 }).clave,
+    estadoInventario({ tipo:'Decant Vacío', stock:6 }).clave,
+    estadoInventario({ esGrupoAbierto:true, tipo:'Perfume para Decant', stock:1, ml:24 }).clave,
+    estadoInventario({ esGrupoAbierto:true, tipo:'Perfume para Decant', stock:1, ml:25 }).clave,
+    estadoInventario({ esGrupoAbierto:true, tipo:'Perfume para Decant', stock:1, ml:0 }).clave
+  ].join(',')`);
+  assert.equal(estados, 'bajo,ok,agotado,bajo,ok,bajo,ok,agotado');
+
+  const sinStock = await p.run(`detalleUbicacionesInventario({ tipo:'Perfume Sellado', stock:0,
+    porUbicacion:{'Tienda Local':{stock:0,ml:0},'Alpha Móvil':{stock:0,ml:0},'Barbería':{stock:0,ml:0}} })`);
+  assert.equal(sinStock, 'Sin stock');
+
+  const ubicaciones = await p.run(`detalleUbicacionesInventario({ esGrupoAbierto:true, tipo:'Perfume para Decant', stock:2, ml:114,
+    porUbicacion:{'Tienda Local':{stock:1,ml:72},'Alpha Móvil':{stock:1,ml:42},'Barbería':{stock:0,ml:0}} })`);
+  assert.equal(ubicaciones, '🏠 Local 72 ml · 🚐 Móvil 42 ml');
+});
+
+test('gestión de inventario: cada acción usa el id real de la fila', async () => {
+  const p = panel();
+  await p.run('cargarProductos()');
+
+  const { sellado, abierto, envase, idxAbierto } = await p.run(`(() => {
+    const grupos = agruparProductosInventario(listaProductos);
+    gruposAbiertosInventario = grupos.filter(g => g.esGrupoAbierto || g.tipo === 'Perfume Sellado');
+    const leer = (tipo, ref) => {
+      abrirModalInventario(tipo, ref);
+      return document.getElementById('contenidoDetalleInventario').innerHTML;
+    };
+    const idxSellado = gruposAbiertosInventario.findIndex(g => g.tipo === 'Perfume Sellado');
+    const idxAbierto = gruposAbiertosInventario.findIndex(g => g.esGrupoAbierto);
+    return { sellado: leer('grupo', idxSellado), abierto: leer('grupo', idxAbierto), envase: leer('producto', 3), idxAbierto };
+  })()`);
+
+  assert.doesNotMatch(sellado, /onclick="[^"]*undefined/);
+  assert.match(sellado, /agregarCantidadPerfumeSellado\(1,/);
+  assert.match(sellado, /abrirPerfumeSellado\(1\)/);
+  assert.match(sellado, /editarPreciosDecant\(1\)/);
+  assert.match(sellado, /abrirModalImagenProducto\(1\)/);
+
+  assert.doesNotMatch(abierto, /onclick="[^"]*undefined/);
+  assert.match(abierto, /agregarFrascoAbierto\(2\)/);
+  assert.match(abierto, /marcarComoVacioPorId\(2, 1\)/);
+  assert.match(abierto, /eliminarProductoPorId\(2\)/);
+  assert.match(abierto, /eliminarUnPerfumeAbierto\(/);
+  assert.ok(abierto.includes(`eliminarUnPerfumeAbierto(${idxAbierto})`));
+
+  assert.doesNotMatch(envase, /onclick="[^"]*undefined/);
+  assert.match(envase, /sumarStockOLote\(3\)/);
+  assert.match(envase, /marcarComoVacioPorId\(3, 10\)/);
+  assert.doesNotMatch(envase, /editarAudioProducto/);
+});
+
 module.exports = { panel };
