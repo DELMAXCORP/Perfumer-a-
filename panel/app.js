@@ -2431,10 +2431,10 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       const response = await fetch(dataUrl);
       const blob = await response.blob();
       const ruta = `${usuarioActual.id}/${crypto.randomUUID()}.jpg`;
-      const { error } = await client.storage.from(COMPROBANTES_BUCKET).upload(ruta, blob, {
+      const { error } = await peticionConLimite(client.storage.from(COMPROBANTES_BUCKET).upload(ruta, blob, {
         contentType: 'image/jpeg',
         upsert: false
-      });
+      }), 45000, 'El comprobante tardó demasiado en subirse. Revisa tu internet o registra la venta sin foto.');
       if (error) throw new Error(`No se pudo guardar el comprobante: ${error.message}`);
       return ruta;
     }
@@ -2826,20 +2826,45 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       }
     });
 
+    // Evita que una petición de red sin respuesta deje la venta "procesando" para siempre.
+    // Si el navegador lo permite, aborta la consulta y rechaza con un mensaje claro.
+    function peticionConLimite(consulta, ms, mensaje) {
+      const limite = ms || 20000;
+      const controlador = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      let peticion = consulta;
+      try {
+        if (controlador && typeof consulta.abortSignal === 'function') peticion = consulta.abortSignal(controlador.signal);
+      } catch (_) { peticion = consulta; }
+      let temporizador;
+      const tiempo = new Promise((_, rechazar) => {
+        temporizador = setTimeout(() => {
+          try { controlador?.abort(); } catch (_) {}
+          const error = new Error(mensaje || 'La conexión tardó demasiado. Revisa tu internet e inténtalo de nuevo.');
+          error.esTiempoDeEspera = true;
+          rechazar(error);
+        }, limite);
+      });
+      return Promise.race([peticion, tiempo]).finally(() => clearTimeout(temporizador));
+    }
+
     async function restaurarReservaStock(reservas) {
       for (const reserva of [...reservas].reverse()) {
-        if (reserva.mlAnterior !== undefined) {
-          const { error } = await client.from('productos').update({ ml_restantes: reserva.mlAnterior, stock: reserva.stockAnterior }).eq('id', reserva.id).eq('ml_restantes', reserva.mlReservado);
-          if (error) console.error('No se pudo devolver el líquido reservado.', reserva.id, error);
-          continue;
+        try {
+          if (reserva.mlAnterior !== undefined) {
+            const { error } = await peticionConLimite(client.from('productos').update({ ml_restantes: reserva.mlAnterior, stock: reserva.stockAnterior }).eq('id', reserva.id).eq('ml_restantes', reserva.mlReservado), 20000, 'No se pudo devolver el líquido reservado a tiempo.');
+            if (error) console.error('No se pudo devolver el líquido reservado.', reserva.id, error);
+            continue;
+          }
+          const { data, error } = await peticionConLimite(client.from('productos')
+            .update({ stock: reserva.stockAnterior })
+            .eq('id', reserva.id)
+            .eq('stock', reserva.stockReservado)
+            .select('id')
+            .maybeSingle(), 20000, 'No se pudo revertir la reserva a tiempo.');
+          if (error || !data) console.error('No se pudo revertir una reserva de stock; requiere revisión manual.', reserva.id, error);
+        } catch (error) {
+          console.error('No se pudo revertir una reserva de stock; requiere revisión manual.', reserva.id, error);
         }
-        const { data, error } = await client.from('productos')
-          .update({ stock: reserva.stockAnterior })
-          .eq('id', reserva.id)
-          .eq('stock', reserva.stockReservado)
-          .select('id')
-          .maybeSingle();
-        if (error || !data) console.error('No se pudo revertir una reserva de stock; requiere revisión manual.', reserva.id, error);
       }
     }
 
@@ -2860,29 +2885,49 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       const reservas = [];
       try {
         for (const [id, ml] of [...consumosMl.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])))) {
-          const { data: perfume, error } = await client.from('productos').select('ml_restantes,stock,tamano').eq('id', id).single();
+          const { data: perfume, error } = await peticionConLimite(
+            client.from('productos').select('ml_restantes,stock,tamano').eq('id', id).single(),
+            20000,
+            'La conexión tardó demasiado al verificar el líquido del perfume. Revisa tu internet e inténtalo de nuevo.'
+          );
           if (error || !perfume) throw new Error('No se pudo verificar el líquido del perfume abierto.');
           const mlAnterior = Number(perfume.ml_restantes ?? (Number(perfume.stock) * (parseInt(perfume.tamano) || 100)));
           if (mlAnterior < ml) throw new Error(`Quedan ${mlAnterior} ml en uno de los frascos abiertos; se necesitan ${ml} ml.`);
           const mlReservado = Math.max(0, mlAnterior - ml);
-          const { data: actualizado, error: errUpdate } = await client.from('productos').update({ ml_restantes: mlReservado, stock: mlReservado > 0 ? 1 : 0 })
-            .eq('id', id).eq('ml_restantes', perfume.ml_restantes).select('id').maybeSingle();
+          const { data: actualizado, error: errUpdate } = await peticionConLimite(
+            client.from('productos').update({ ml_restantes: mlReservado, stock: mlReservado > 0 ? 1 : 0 })
+              .eq('id', id).eq('ml_restantes', perfume.ml_restantes).select('id').maybeSingle(),
+            20000,
+            'La conexión tardó demasiado al descontar el líquido del perfume. Revisa tu internet e inténtalo de nuevo.'
+          );
           if (errUpdate) throw new Error('No se pudo descontar el líquido: ' + errUpdate.message);
           // El valor NULL identifica frascos antiguos previos a la migración; reintentar una vez con su valor inicial inferido.
           if (!actualizado && perfume.ml_restantes == null) {
-            const { data: actualizadoLegacy, error: errLegacy } = await client.from('productos').update({ ml_restantes: mlReservado, stock: mlReservado > 0 ? 1 : 0 }).eq('id', id).is('ml_restantes', null).select('id').maybeSingle();
+            const { data: actualizadoLegacy, error: errLegacy } = await peticionConLimite(
+              client.from('productos').update({ ml_restantes: mlReservado, stock: mlReservado > 0 ? 1 : 0 }).eq('id', id).is('ml_restantes', null).select('id').maybeSingle(),
+              20000,
+              'La conexión tardó demasiado al descontar el líquido del perfume. Revisa tu internet e inténtalo de nuevo.'
+            );
             if (errLegacy || !actualizadoLegacy) throw new Error('El inventario del perfume cambió durante la venta; vuelve a intentarlo.');
           } else if (!actualizado) throw new Error('El inventario del perfume cambió durante la venta; vuelve a intentarlo.');
           reservas.push({ id, mlAnterior, mlReservado, stockAnterior: Number(perfume.stock) });
         }
         for (const [id, cantidad] of [...cantidades.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])))) {
-          const { data: producto, error: errorLectura } = await client.from('productos').select('stock').eq('id', id).single();
+          const { data: producto, error: errorLectura } = await peticionConLimite(
+            client.from('productos').select('stock').eq('id', id).single(),
+            20000,
+            'La conexión tardó demasiado al verificar el stock. Revisa tu internet e inténtalo de nuevo.'
+          );
           if (errorLectura || !producto) throw new Error('No se pudo verificar el stock del producto ' + id + '.');
           const stockAnterior = Number(producto.stock);
           if (stockAnterior < cantidad) throw new Error('Stock insuficiente. Actualiza el inventario antes de registrar la venta.');
           const stockReservado = stockAnterior - cantidad;
-          const { data: actualizado, error: errorActualizacion } = await client.from('productos')
-            .update({ stock: stockReservado }).eq('id', id).eq('stock', stockAnterior).select('id').maybeSingle();
+          const { data: actualizado, error: errorActualizacion } = await peticionConLimite(
+            client.from('productos')
+              .update({ stock: stockReservado }).eq('id', id).eq('stock', stockAnterior).select('id').maybeSingle(),
+            20000,
+            'La conexión tardó demasiado al descontar el stock. Revisa tu internet e inténtalo de nuevo.'
+          );
           if (errorActualizacion) throw new Error('No se pudo descontar el stock: ' + errorActualizacion.message);
           if (!actualizado) throw new Error('El inventario cambió mientras procesabas la venta. Revisa el carrito e inténtalo de nuevo.');
           reservas.push({ id, stockAnterior, stockReservado });
@@ -2899,10 +2944,14 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       
       if (procesandoVenta) return;
       if (!carritoVenta.length) return alert('¡Agrega al menos un producto al carrito antes de procesar la venta!');
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return alert('Sin conexión a internet. La venta no se registró; vuelve a intentarlo cuando se restablezca la conexión.');
+      }
 
       const btnSubmit = document.getElementById('btnSubmitVenta');
       let reservaStock = [];
       let ventaGuardada = false;
+      let insertEnviado = false;
       
       try {
         procesandoVenta = true;
@@ -2938,7 +2987,12 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
           notas: notasTexto || null
         };
 
-        const { data: ventaRegistrada, error } = await client.from('ventas').insert([venta]).select(VENTAS_COLUMNAS).single();
+        insertEnviado = true;
+        const { data: ventaRegistrada, error } = await peticionConLimite(
+          client.from('ventas').insert([venta]).select(VENTAS_COLUMNAS).single(),
+          45000,
+          'El servidor tardó demasiado en confirmar la venta.'
+        );
         if (error) {
           await restaurarReservaStock(reservaStock);
           reservaStock = [];
@@ -2962,28 +3016,45 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
             sonidoVenta.addEventListener('error', terminar, { once: true });
             setTimeout(terminar, Number.isFinite(sonidoVenta.duration) ? sonidoVenta.duration * 1000 + 1500 : 20000);
           });
-          await comprobarMetaVentasDiaria(audioVentaFinalizado);
-          refrescarCajaDelDia();
-          mostrarAviso('Venta registrada correctamente. Puedes imprimir el ticket desde el Historial.', 'success');
+
           const agotadosEnVenta = reservaStock.filter(r => r.mlAnterior !== undefined && Number(r.mlReservado) === 0);
           if (agotadosEnVenta.length) {
             const agotados = agotadosEnVenta.map(r => listaProductos.find(p => String(p.id) === String(r.id))?.nombre || 'Perfume').join(', ');
             alert(`⚠️ Se agotó el perfume abierto: ${agotados}. Abre un frasco sellado para reponerlo.`);
           }
+
+          // La venta ya está guardada: liberamos la interfaz de inmediato.
+          // La meta diaria, el borrador y la caja corren aparte para que una
+          // demora de red no vuelva a dejar el botón en "Procesando Venta...".
           carritoVenta = [];
           comprobanteBase64 = null;
           document.getElementById('vtaNotas').value = '';
           document.getElementById('vtaFotoComprobante').value = '';
           document.getElementById('previewComprobanteContainer').classList.add('hidden');
-          await borrarBorradorVenta();
           renderizarCarrito();
           document.getElementById('itemBuscador').value = '';
           actualizarOpcionesVenta();
+          refrescarCajaDelDia();
+          mostrarAviso('Venta registrada correctamente. Puedes imprimir el ticket desde el Historial.', 'success');
+
+          comprobarMetaVentasDiaria(audioVentaFinalizado).catch(err => console.warn('No se pudo comprobar la meta diaria de ventas:', err));
+          borrarBorradorVenta().catch(err => console.warn('No se pudo borrar el borrador de venta:', err));
           cargarTodo();
         }
       } catch (err) {
-        if (!ventaGuardada && reservaStock.length) await restaurarReservaStock(reservaStock);
-        alert('Ocurrió un error inesperado al procesar la venta: ' + err.message);
+        const noConfirmada = insertEnviado && err && err.esTiempoDeEspera;
+        // Si la venta nunca llegó a guardarse, devolvemos el stock reservado.
+        // Si el tiempo se agotó al confirmar la venta, no tocamos el stock:
+        // el servidor pudo haberla guardado y hay que verificarlo manualmente.
+        if (!ventaGuardada && reservaStock.length && !noConfirmada) await restaurarReservaStock(reservaStock);
+        const detalleError = err?.name === 'AbortError'
+          ? 'La conexión se interrumpió antes de confirmar la venta.'
+          : (err?.message || 'Error desconocido.');
+        if (noConfirmada) {
+          alert('No se pudo confirmar la venta a tiempo.\n\n' + detalleError + '\n\nNO vuelvas a registrarla todavía: revisa el Historial y el inventario. Si la venta aparece allí, ya quedó guardada; si no aparece, puedes intentarlo de nuevo.');
+        } else {
+          alert('Ocurrió un error inesperado al procesar la venta: ' + detalleError + '\n\nAntes de volver a registrarla, revisa el Historial para evitar un cobro o descuento duplicado.');
+        }
       } finally {
         procesandoVenta = false;
         if (sesionPendienteDeLimpiar) {

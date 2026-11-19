@@ -318,4 +318,20 @@ test('gestión de inventario: cada acción usa el id real de la fila', async () 
   assert.doesNotMatch(envase, /editarAudioProducto/);
 });
 
+test('la venta libera el botón aunque la meta diaria o el borrador no respondan', async () => {
+  const p = panel(); await p.run('cargarProductos()');
+  p.run('comprobarMetaVentasDiaria=()=>new Promise(()=>{}); borrarBorradorVenta=()=>new Promise(()=>{});');
+  p.run("carritoVenta=[{tipo:'Perfume Sellado',producto_id:1,nombre:'Sellado',tamano:'100ml',cantidad:1,subtotal:100,costo_total:50}]");
+  const boton = p.node('btnSubmitVenta');
+  const inicio = Date.now();
+  await p.node('formVenta').listeners.submit({ preventDefault() {} });
+  assert.ok(Date.now() - inicio < 2000, 'no debe esperar tareas secundarias');
+  assert.equal(p.run('procesandoVenta'), false);
+  assert.equal(boton.disabled, false);
+  assert.equal(boton.innerText, '✅ Procesar Venta Completa');
+  assert.equal(p.run('carritoVenta.length'), 0);
+  assert.equal(p.tables.productos[0].stock, 2);
+  assert.equal(p.tables.ventas.length, 3);
+});
+
 module.exports = { panel };
