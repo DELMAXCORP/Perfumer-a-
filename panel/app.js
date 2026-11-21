@@ -31,6 +31,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     const CIERRES_COLUMNAS = 'fecha,ubicacion,contenido,inventario,actualizado_por,actualizado_en';
     const ASISTENCIA_COLUMNAS = 'id,vendedor_email,fecha_ingreso,fecha_salida,horas_trabajadas';
     const CONTACTOS_COLUMNAS = 'id,created_at,nombre,telefono,forma_entrega,estado,pedido_resumen';
+    const SOLICITUDES_COLUMNAS = 'id,producto_id,producto_nombre,producto_tamano,ubicacion,ml_anterior,ml_solicitado,stock_anterior,stock_solicitado,estado,solicitado_por,solicitado_en,revisado_por,revisado_en,motivo_rechazo';
     let tabActual = 'venta';
     let historialRevision = 0;
     let cierreRevision = 0;
@@ -111,6 +112,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       datos.privateCache.clear();
       if (tabActual === 'asistencia') await cargarEstadoAsistencia();
       else if (tabActual === 'contactos') await cargarContactosMarketing();
+      else if (tabActual === 'solicitudes') await cargarSolicitudes();
       else await cargarTodo();
     }
 
@@ -119,6 +121,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     let usuarioActual = null;
     let cierresInventarioCache = [];
     let listaProductos = [];
+    let solicitudesMedicion = [];
     const aperturasEnProceso = new Set();
     let gruposAbiertosInventario = [];
     let carritoVenta = [];
@@ -443,7 +446,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       const scope = usuarioActual.id || usuarioActual.email;
       if (datos.privateCache.scope !== scope) { limpiarDatosPrivados(); datos.privateCache.setScope(scope); firmas.setScope(scope); }
       tabActual = 'venta';
-      for (const tab of ['venta','stock','cierre','historial','asistencia','contactos']) {
+      for (const tab of ['venta','stock','solicitudes','cierre','historial','asistencia','contactos']) {
         document.getElementById('tab-' + tab).classList.toggle('hidden', tab !== 'venta');
         const button = document.querySelector('.nav-tabs [data-tab="' + tab + '"]');
         if (tab === 'venta') button?.setAttribute('aria-current', 'page');
@@ -473,6 +476,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       renderizarCarrito();
       await cargarTodo();
       await cargarEstadoAsistencia();
+      await actualizarBadgeSolicitudes().catch(() => {});
     }
 
     async function cerrarSesion() {
@@ -492,12 +496,13 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
 
     function mostrarTab(tab) {
-      const secciones = ['venta', 'stock', 'cierre', 'historial', 'asistencia', 'contactos'];
+      const secciones = ['venta', 'stock', 'solicitudes', 'cierre', 'historial', 'asistencia', 'contactos'];
       if (!secciones.includes(tab)) return;
       tabActual = tab;
       if (tab === 'historial') cargarHistorial();
       if (tab === 'stock' || tab === 'venta') cargarProductos();
       if (tab === 'venta') cargarCajaDelDia();
+      if (tab === 'solicitudes') cargarSolicitudes();
       secciones.forEach(t => {
         document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
         const boton = document.querySelector('.nav-tabs [data-tab="' + t + '"]');
@@ -758,12 +763,31 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       const filaHtml = fila => {
         const stockFila = Math.max(0, Number(fila.stock) || 0);
         if (esLiquido) {
-          const ml = Math.max(0, Number(fila.ml_restantes ?? (stockFila * (parseInt(fila.tamano) || 100))) || 0);
+          const capacidad = Math.max(1, parseInt(fila.tamano) || 100);
+          const maxMl = capacidad * Math.max(1, stockFila);
+          const ml = Math.max(0, Number(fila.ml_restantes ?? (stockFila * capacidad)) || 0);
+          const mlExacto = Math.round(ml * 10) / 10;
           return `
             <div class="inventory-lot">
               <div class="inventory-lot-head">
                 <strong>${stockFila} ${stockFila === 1 ? 'frasco abierto' : 'frascos abiertos'}</strong>
-                <span>${Math.round(ml)} ml restantes</span>
+                <span>${mlExacto} ml restantes</span>
+              </div>
+              <div class="inventory-measure">
+                <label for="mlReal-${fila.id}">${admin ? 'Contenido real medido' : 'Contenido real medido · requiere aprobación'}</label>
+                <div class="inventory-measure-row">
+                  <input type="number" id="mlReal-${fila.id}" min="0" max="${maxMl}" step="1" value="${mlExacto}" inputmode="decimal" aria-describedby="mlAyuda-${fila.id}">
+                  <span class="inventory-measure-unit">ml</span>
+                  <button type="button" class="btn-add" onclick="ajustarMlFrascoAbierto(${fila.id}, 'mlReal-${fila.id}')">${admin ? '✅ Guardar medición' : '📨 Solicitar aprobación'}</button>
+                </div>
+                <div class="inventory-measure-presets" role="group" aria-label="Medición rápida de ${escaparHTML(producto.nombre)}">
+                  <button type="button" onclick="ponerMlMedicion('mlReal-${fila.id}', 0)">Vacío</button>
+                  <button type="button" onclick="ponerMlMedicion('mlReal-${fila.id}', ${Math.round(maxMl * 0.25)})">¼</button>
+                  <button type="button" onclick="ponerMlMedicion('mlReal-${fila.id}', ${Math.round(maxMl * 0.5)})">½</button>
+                  <button type="button" onclick="ponerMlMedicion('mlReal-${fila.id}', ${Math.round(maxMl * 0.75)})">¾</button>
+                  <button type="button" onclick="ponerMlMedicion('mlReal-${fila.id}', ${maxMl})">Lleno</button>
+                </div>
+                <p class="inventory-measure-help" id="mlAyuda-${fila.id}">${stockFila > 1 ? `Esta fila agrupa ${stockFila} frascos: escribe el total de ml de todos.` : `Máximo ${maxMl} ml. Ajusta al contenido que ves antes de vender decants.`}</p>
               </div>
               ${admin ? `<div class="inventory-lot-actions">
                 <button type="button" class="btn-add" onclick="agregarFrascoAbierto(${fila.id})">➕ Añadir 1 frasco</button>
@@ -869,7 +893,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
 
         ${bloquesUbicacion || '<p class="empty-msg">Este perfume no tiene filas de stock registradas.</p>'}
 
-        ${admin ? '' : '<p class="inventory-readonly">Solo lectura: las acciones de inventario están disponibles para administradores.</p>'}
+        ${admin ? '' : '<p class="inventory-readonly">Puedes proponer una medición de ml. Un administrador la revisará en “Solicitudes” antes de aplicarla.</p>'}
 
         <button type="button" class="btn-sec inventory-modal-cerrar" onclick="cerrarModalInventario()">Cerrar</button>
       `;
@@ -1496,6 +1520,274 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       cargarTodo();
     }
 
+    // Rellena el campo de medición con una fracción del frasco. No guarda nada:
+    // el administrador confirma con "Guardar medición" para evitar toques accidentales.
+    function ponerMlMedicion(campoId, ml) {
+      const campo = document.getElementById(campoId);
+      if (!campo) return;
+      campo.value = String(Math.max(0, Math.round(Number(ml) || 0)));
+      campo.focus?.();
+    }
+
+    // Corrige los mililitros reales de un frasco abierto. Es la forma práctica de
+    // que el inventario deje de acumular diferencias entre lo vendido y lo que
+    // realmente queda en la botella (por ejemplo, 2 ml registrados y ~25 ml reales).
+    async function ajustarMlFrascoAbierto(id, campoId) {
+      if (!usuarioActual) return alert('Inicia sesión para registrar la medición.');
+      const fila = listaProductos.find(p => String(p.id) === String(id) && p.tipo === 'Perfume para Decant');
+      if (!fila) return alert('No se encontró el frasco abierto. Actualiza el inventario e inténtalo de nuevo.');
+
+      const campo = document.getElementById(campoId);
+      const valorCampo = String(campo?.value ?? '').trim();
+      if (!valorCampo) return alert('Escribe la cantidad de ml que mediste en el frasco.');
+      const capacidad = Math.max(1, parseInt(fila.tamano) || 100);
+      const stockFila = Math.max(0, Number(fila.stock) || 0);
+      const maxMl = capacidad * Math.max(1, stockFila);
+      const mlAnterior = Math.max(0, Number(fila.ml_restantes ?? (stockFila * capacidad)) || 0);
+      const mlNuevo = Math.round(Number(valorCampo) * 100) / 100;
+      if (!Number.isFinite(mlNuevo) || mlNuevo < 0) return alert('Escribe una cantidad de ml válida (0 o más).');
+      if (mlNuevo > maxMl) return alert(`El máximo para esta fila es ${maxMl} ml (${Math.max(1, stockFila)} × ${capacidad} ml). Si el frasco está más lleno, revisa la capacidad o crea una fila nueva.`);
+      if (Math.abs(mlNuevo - mlAnterior) < 0.01) return alert('La medición ya está al día: no hay diferencias por guardar.');
+
+      const diferencia = Math.round((mlNuevo - mlAnterior) * 100) / 100;
+      const nuevoStock = mlNuevo > 0 ? Math.max(1, stockFila) : 0;
+      const ubicacion = fila.ubicacion_stock || 'Tienda Local';
+      const textoMl = valor => `${Math.round(valor * 10) / 10} ml`;
+      const signo = diferencia > 0 ? '+' : '';
+      const adminUsuario = esAdmin();
+      const pregunta = adminUsuario
+        ? `¿Guardar la medición real de "${fila.nombre}" en ${ubicacion}?`
+        : `¿Enviar la medición de "${fila.nombre}" en ${ubicacion} para aprobación?`;
+      if (!confirm(`${pregunta}\n\nAntes: ${textoMl(mlAnterior)}\nAhora: ${textoMl(mlNuevo)}\nDiferencia: ${signo}${textoMl(diferencia)}\n\n${adminUsuario ? 'Los próximos decants se descontarán desde este valor.' : 'El cambio se aplicará recién cuando un administrador lo apruebe.'}`)) return;
+
+      // Los vendedores no aplican el cambio: lo dejan en la bandeja de solicitudes.
+      if (!adminUsuario) {
+        const { error } = await peticionConLimite(
+          client.from('solicitudes_medicion_ml').insert([{
+            producto_id: fila.id,
+            producto_nombre: fila.nombre,
+            producto_tamano: fila.tamano || null,
+            ubicacion,
+            ml_anterior: mlAnterior,
+            ml_solicitado: mlNuevo,
+            stock_anterior: stockFila,
+            stock_solicitado: nuevoStock,
+            estado: 'pendiente',
+            solicitado_por: usuarioActual.email
+          }]).select('id').single(),
+          20000,
+          'La conexión tardó demasiado al enviar la solicitud.'
+        );
+        if (error) return alert('No se pudo enviar la solicitud: ' + error.message + '\n\nAvisa al administrador para ejecutar database/solicitudes-medicion-ml.sql.');
+        alert('Solicitud enviada. Un administrador debe aprobarla antes de que la medición se aplique.');
+        try {
+          await cargarSolicitudes();
+          actualizarBadgeSolicitudes().catch(() => {});
+        } catch (_) {}
+        return;
+      }
+
+      let consulta = client.from('productos')
+        .update({ ml_restantes: mlNuevo, stock: nuevoStock })
+        .eq('id', id);
+      consulta = fila.ml_restantes == null
+        ? consulta.is('ml_restantes', null)
+        : consulta.eq('ml_restantes', fila.ml_restantes).eq('stock', fila.stock);
+      const { data: actualizado, error } = await consulta.select('id').maybeSingle();
+      if (error) return alert('No se pudo guardar la medición: ' + error.message);
+      if (!actualizado) return alert('El inventario cambió mientras medías. Vuelve a abrir la ficha y registra la medición otra vez.');
+
+      const errorMovimiento = await registrarMovimientoInventario({
+        producto_id: String(fila.id),
+        producto_nombre: fila.nombre,
+        producto_tipo: fila.tipo,
+        producto_tamano: fila.tamano,
+        tipo_movimiento: 'ajuste',
+        cantidad: Math.max(1, Math.round(Math.abs(diferencia))),
+        ubicacion_destino: ubicacion,
+        costo_unitario: 0,
+        costo_total: 0
+      });
+      if (errorMovimiento) {
+        alert('La medición se guardó, pero no se registró en el historial. Ejecuta database/inventario-ajuste-ml.sql para dejar el rastro de los ajustes.');
+      } else {
+        alert(`Medición guardada: ${textoMl(mlNuevo)} en ${ubicacion}.`);
+      }
+      try {
+        await cargarTodo();
+        // Refresca la ficha abierta para que el encabezado y los totales muestren
+        // de inmediato la medición nueva, sin tener que cerrar y volver a entrar.
+        const modal = document.getElementById('modalDetalleInventario');
+        if (modal && !modal.classList.contains('hidden')) {
+          const idx = gruposAbiertosInventario.findIndex(g => g.esGrupoAbierto
+            && UBICACIONES_INVENTARIO.some(u => (g.porUbicacion[u]?.filas || []).some(f => String(f.id) === String(id))));
+          if (idx >= 0) abrirModalInventario('grupo', idx);
+        }
+      } catch (_) {
+        // La medición ya quedó guardada; una recarga fallida no debe revertirla.
+      }
+    }
+
+    async function actualizarBadgeSolicitudes() {
+      const badge = document.getElementById('badgeSolicitudes');
+      if (!badge || !usuarioActual) return;
+      try {
+        const data = await leerLista('solicitudes-pendientes', () => client.from('solicitudes_medicion_ml').select('id').eq('estado', 'pendiente'), 30000);
+        const total = (data || []).length;
+        badge.textContent = String(total);
+        badge.classList.toggle('hidden', total === 0);
+      } catch (_) {
+        badge.classList.add('hidden');
+      }
+    }
+
+    async function cargarSolicitudes() {
+      const resumen = document.getElementById('solicitudesResumen');
+      if (!usuarioActual) return;
+      try {
+        const data = await leerLista('solicitudes-medicion', () => client.from('solicitudes_medicion_ml')
+          .select(SOLICITUDES_COLUMNAS)
+          .order('solicitado_en', { ascending: false })
+          .order('id', { ascending: false }));
+        solicitudesMedicion = data || [];
+      } catch (error) {
+        solicitudesMedicion = [];
+        if (resumen) resumen.textContent = 'No se pudieron cargar las solicitudes. Ejecuta database/solicitudes-medicion-ml.sql en Supabase.';
+        console.warn('No se pudieron cargar las solicitudes de medición:', error);
+        return;
+      }
+      renderizarSolicitudes();
+      const pendientes = solicitudesMedicion.filter(s => s.estado === 'pendiente').length;
+      const badge = document.getElementById('badgeSolicitudes');
+      if (badge) {
+        badge.textContent = String(pendientes);
+        badge.classList.toggle('hidden', pendientes === 0);
+      }
+    }
+
+    function renderizarSolicitudes() {
+      const cont = document.getElementById('listaSolicitudes');
+      const resumen = document.getElementById('solicitudesResumen');
+      if (!cont || !resumen) return;
+      const contar = estado => solicitudesMedicion.filter(s => s.estado === estado).length;
+      const pendientes = contar('pendiente');
+      resumen.innerHTML = `<strong>${pendientes}</strong> ${pendientes === 1 ? 'pendiente' : 'pendientes'} · ${contar('aprobada')} aprobadas · ${contar('rechazada')} rechazadas`;
+      if (!solicitudesMedicion.length) {
+        cont.innerHTML = `<p class="empty-msg">${esAdmin() ? 'No hay solicitudes de medición todavía.' : 'Todavía no enviaste solicitudes de medición.'}</p>`;
+        return;
+      }
+      cont.innerHTML = solicitudesMedicion.map(solicitud => {
+        const estado = ['pendiente', 'aprobada', 'rechazada'].includes(solicitud.estado) ? solicitud.estado : 'pendiente';
+        const etiqueta = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' }[estado];
+        const clase = { pendiente: 'aviso', aprobada: 'ok', rechazada: 'peligro' }[estado];
+        const mlAnterior = Math.round((Number(solicitud.ml_anterior) || 0) * 10) / 10;
+        const mlSolicitado = Math.round((Number(solicitud.ml_solicitado) || 0) * 10) / 10;
+        const diferencia = Math.round((mlSolicitado - mlAnterior) * 10) / 10;
+        const signo = diferencia > 0 ? '+' : '';
+        const fecha = solicitud.solicitado_en ? new Date(solicitud.solicitado_en).toLocaleString('es-PE') : '';
+        const revision = estado !== 'pendiente' && solicitud.revisado_por
+          ? `<p class="solicitud-revision">${estado === 'aprobada' ? 'Aprobada' : 'Rechazada'} por ${escaparHTML(solicitud.revisado_por)}${solicitud.revisado_en ? ` · ${new Date(solicitud.revisado_en).toLocaleString('es-PE')}` : ''}</p>`
+          : '';
+        const motivo = estado === 'rechazada' && solicitud.motivo_rechazo
+          ? `<p class="solicitud-motivo">Motivo: ${escaparHTML(solicitud.motivo_rechazo)}</p>`
+          : '';
+        const acciones = esAdmin() && estado === 'pendiente'
+          ? `<div class="solicitud-acciones">
+              <button type="button" class="btn-add" onclick="aprobarSolicitudMedicion(${solicitud.id})">✅ Aprobar y aplicar</button>
+              <button type="button" class="btn-del" onclick="rechazarSolicitudMedicion(${solicitud.id})">🚫 Rechazar</button>
+            </div>`
+          : '';
+        return `<article class="solicitud-card estado-${estado}">
+          <div class="solicitud-head">
+            <strong>${escaparHTML(solicitud.producto_nombre || 'Perfume')}</strong>
+            <span class="solicitud-badge ${clase}">${etiqueta}</span>
+          </div>
+          <p class="solicitud-detalle">${escaparHTML(solicitud.ubicacion || 'Sin ubicación')}${solicitud.producto_tamano ? ` · ${escaparHTML(solicitud.producto_tamano)}` : ''}</p>
+          <p class="solicitud-ml"><span>${mlAnterior} ml</span> → <strong>${mlSolicitado} ml</strong> <small>(${signo}${diferencia} ml)</small></p>
+          <p class="solicitud-meta">Solicitado por ${escaparHTML(solicitud.solicitado_por || '—')}${fecha ? ` · ${fecha}` : ''}</p>
+          ${revision}${motivo}${acciones}
+        </article>`;
+      }).join('');
+    }
+
+    async function aprobarSolicitudMedicion(id) {
+      if (!esAdmin()) return alert('Acceso denegado: Solo los administradores pueden aprobar solicitudes.');
+      const solicitud = solicitudesMedicion.find(s => Number(s.id) === Number(id));
+      if (!solicitud) return alert('No se encontró la solicitud. Actualiza la lista e inténtalo de nuevo.');
+      if (solicitud.estado !== 'pendiente') return alert('Esta solicitud ya fue revisada.');
+
+      const { data: producto, error } = await peticionConLimite(
+        client.from('productos').select('ml_restantes,stock,tamano').eq('id', solicitud.producto_id).single(),
+        20000,
+        'La conexión tardó demasiado al leer el perfume. Inténtalo de nuevo.'
+      );
+      if (error || !producto) return alert('No se pudo leer el perfume para aplicar la medición: ' + (error?.message || 'No existe.'));
+      const mlActual = Math.max(0, Number(producto.ml_restantes ?? (Number(producto.stock) * (parseInt(producto.tamano) || 100))) || 0);
+      if (Math.abs(mlActual - Number(solicitud.ml_anterior)) > 0.01) {
+        const continuar = confirm(`El frasco cambió desde la solicitud.\n\nCuando se pidió: ${Number(solicitud.ml_anterior)} ml\nAhora: ${mlActual} ml\nSe aplicará: ${Number(solicitud.ml_solicitado)} ml\n\n¿Aplicar igual la medición solicitada?`);
+        if (!continuar) return;
+      }
+
+      const mlNuevo = Number(solicitud.ml_solicitado);
+      const stockNuevo = mlNuevo > 0 ? Math.max(1, Number(producto.stock) || 1) : 0;
+      const { error: errorProducto } = await peticionConLimite(
+        client.from('productos').update({ ml_restantes: mlNuevo, stock: stockNuevo }).eq('id', solicitud.producto_id),
+        20000,
+        'La conexión tardó demasiado al aplicar la medición.'
+      );
+      if (errorProducto) return alert('No se pudo aplicar la medición: ' + errorProducto.message);
+
+      const { data: revisada, error: errorSolicitud } = await client.from('solicitudes_medicion_ml')
+        .update({ estado: 'aprobada', revisado_por: usuarioActual.email, revisado_en: new Date().toISOString() })
+        .eq('id', solicitud.id).eq('estado', 'pendiente').select('id').maybeSingle();
+      if (errorSolicitud) alert('La medición se aplicó, pero no se pudo marcar la solicitud como aprobada: ' + errorSolicitud.message);
+      else if (!revisada) alert('La medición se aplicó, pero la solicitud ya había sido revisada por otro administrador.');
+
+      if (!errorSolicitud && revisada) {
+        const errorMovimiento = await registrarMovimientoInventario({
+          producto_id: String(solicitud.producto_id),
+          producto_nombre: solicitud.producto_nombre,
+          producto_tipo: 'Perfume para Decant',
+          producto_tamano: solicitud.producto_tamano,
+          tipo_movimiento: 'ajuste',
+          cantidad: Math.max(1, Math.round(Math.abs(mlNuevo - mlActual))),
+          ubicacion_destino: solicitud.ubicacion,
+          costo_unitario: 0,
+          costo_total: 0
+        });
+        if (errorMovimiento) alert('La medición se aplicó, pero no se registró en el historial. Ejecuta database/inventario-ajuste-ml.sql.');
+      }
+
+      datos.privateCache.clear();
+      try { await cargarTodo(); } catch (_) {}
+      await cargarSolicitudes();
+      mostrarAviso('Solicitud aprobada. La medición ya está aplicada.', 'success');
+    }
+
+    async function rechazarSolicitudMedicion(id) {
+      if (!esAdmin()) return alert('Acceso denegado: Solo los administradores pueden rechazar solicitudes.');
+      const solicitud = solicitudesMedicion.find(s => Number(s.id) === Number(id));
+      if (!solicitud) return alert('No se encontró la solicitud. Actualiza la lista e inténtalo de nuevo.');
+      if (solicitud.estado !== 'pendiente') return alert('Esta solicitud ya fue revisada.');
+      const motivo = typeof prompt === 'function'
+        ? prompt(`Motivo del rechazo de "${solicitud.producto_nombre}" (opcional):`, '')
+        : '';
+      if (motivo === null) return;
+      const { data: revisada, error } = await client.from('solicitudes_medicion_ml')
+        .update({
+          estado: 'rechazada',
+          revisado_por: usuarioActual.email,
+          revisado_en: new Date().toISOString(),
+          motivo_rechazo: String(motivo || '').trim() || null
+        })
+        .eq('id', solicitud.id).eq('estado', 'pendiente').select('id').maybeSingle();
+      if (error) return alert('No se pudo rechazar la solicitud: ' + error.message);
+      if (!revisada) return alert('La solicitud ya había sido revisada por otro administrador.');
+      datos.privateCache.clear();
+      await cargarSolicitudes();
+      mostrarAviso('Solicitud rechazada. El inventario no cambió.', 'success');
+    }
+
     async function agregarCantidadPerfumeSellado(id, campoId = `cantidadAgregarSellado-${id}`, costoId = null) {
       if (!esAdmin()) return alert('Acceso denegado: Solo los administradores pueden modificar el inventario.');
       const producto = listaProductos.find(p => String(p.id) === String(id) && p.tipo === 'Perfume Sellado');
@@ -1876,11 +2168,24 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
       if (!esAdmin()) return alert('Acceso denegado: Solo los administradores pueden modificar el inventario.');
       if (stockActual <= 0) return alert(`"${nombre}" ya no tiene unidades disponibles.`);
 
-      const confirmar = confirm(`¿Confirmas que se terminó 1 unidad de "${nombre}"?\n\nStock actual: ${stockActual} ➔ Quedarán: ${stockActual - 1}`);
+      const producto = listaProductos.find(p => Number(p.id) === Number(id));
+      const esAbierto = producto?.tipo === 'Perfume para Decant';
+      const confirmar = confirm(`¿Confirmas que se terminó 1 unidad de "${nombre}"?\n\nStock actual: ${stockActual} ➔ Quedarán: ${stockActual - 1}${esAbierto ? '\n\nTambién se descontarán del líquido disponible los ml de ese frasco.' : ''}`);
       if (!confirmar) return;
 
       const nuevoStock = stockActual - 1;
-      const { error } = await client.from('productos').update({ stock: nuevoStock }).eq('id', id);
+      const cambios = { stock: nuevoStock };
+      if (esAbierto) {
+        // Un frasco terminado ya no aporta líquido. Si la fila agrupa varios
+        // frascos, se descuenta la parte proporcional; la medición real permite
+        // corregir el valor exacto en un toque.
+        const capacidad = Math.max(1, parseInt(producto?.tamano) || 100);
+        const mlActual = Math.max(0, Number(producto?.ml_restantes ?? (stockActual * capacidad)) || 0);
+        cambios.ml_restantes = nuevoStock > 0
+          ? Math.max(0, mlActual - (mlActual / Math.max(1, stockActual)))
+          : 0;
+      }
+      const { error } = await client.from('productos').update(cambios).eq('id', id);
 
       if (error) alert('Error al actualizar: ' + error.message);
       else {
@@ -2894,8 +3199,11 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
           const mlAnterior = Number(perfume.ml_restantes ?? (Number(perfume.stock) * (parseInt(perfume.tamano) || 100)));
           if (mlAnterior < ml) throw new Error(`Quedan ${mlAnterior} ml en uno de los frascos abiertos; se necesitan ${ml} ml.`);
           const mlReservado = Math.max(0, mlAnterior - ml);
+          // Verter un decant no elimina la botella: si en esta fila hay 2 frascos
+          // abiertos deben seguir siendo 2. Solo se pone en 0 cuando no queda líquido.
+          const stockReservado = mlReservado > 0 ? Math.max(1, Number(perfume.stock) || 1) : 0;
           const { data: actualizado, error: errUpdate } = await peticionConLimite(
-            client.from('productos').update({ ml_restantes: mlReservado, stock: mlReservado > 0 ? 1 : 0 })
+            client.from('productos').update({ ml_restantes: mlReservado, stock: stockReservado })
               .eq('id', id).eq('ml_restantes', perfume.ml_restantes).select('id').maybeSingle(),
             20000,
             'La conexión tardó demasiado al descontar el líquido del perfume. Revisa tu internet e inténtalo de nuevo.'
@@ -2904,7 +3212,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
           // El valor NULL identifica frascos antiguos previos a la migración; reintentar una vez con su valor inicial inferido.
           if (!actualizado && perfume.ml_restantes == null) {
             const { data: actualizadoLegacy, error: errLegacy } = await peticionConLimite(
-              client.from('productos').update({ ml_restantes: mlReservado, stock: mlReservado > 0 ? 1 : 0 }).eq('id', id).is('ml_restantes', null).select('id').maybeSingle(),
+              client.from('productos').update({ ml_restantes: mlReservado, stock: stockReservado }).eq('id', id).is('ml_restantes', null).select('id').maybeSingle(),
               20000,
               'La conexión tardó demasiado al descontar el líquido del perfume. Revisa tu internet e inténtalo de nuevo.'
             );
@@ -3388,7 +3696,10 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
               const mlActual = Number(perfume.ml_restantes ?? (Number(perfume.stock) * (parseInt(perfume.tamano) || 100)));
               const mlVendidos = item.tipo === 'Perfume Abierto' ? Number(item.ml_vendido || 0) : (parseInt(item.tamano) || 3) * Number(item.cantidad || 1);
               const mlDevueltos = mlActual + mlVendidos;
-              await client.from('productos').update({ ml_restantes: mlDevueltos, stock: mlDevueltos > 0 ? 1 : 0 }).eq('id', item.producto_id);
+              // Al anular, la botella vuelve a existir: conservamos el número de
+              // frascos de la fila en lugar de reducirlo siempre a 1.
+              const stockDevuelto = mlDevueltos > 0 ? Math.max(1, Number(perfume.stock) || 1) : 0;
+              await client.from('productos').update({ ml_restantes: mlDevueltos, stock: stockDevuelto }).eq('id', item.producto_id);
             }
             const envase = item.tipo === 'Decant' ? buscarEnvaseDecantDisponible(item.tamano) : null;
             if (envase) {
@@ -4072,7 +4383,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
         'Ubicación origen', 'Ubicación destino', 'Costo unitario (S/)', 'Costo total (S/)', 'Registrado por'
       ]];
       movimientosParaExportar.forEach(movimiento => {
-        const etiquetas = { compra: 'Compra', alta_inicial: 'Alta inicial', traslado: 'Cambio de ubicación', apertura: 'Apertura para decants' };
+        const etiquetas = { compra: 'Compra', alta_inicial: 'Alta inicial', traslado: 'Cambio de ubicación', apertura: 'Apertura para decants', ajuste: 'Ajuste de medición' };
         datosInventario.push([
           new Date(movimiento.fecha).toLocaleString('es-PE'),
           etiquetas[movimiento.tipo_movimiento] || movimiento.tipo_movimiento,

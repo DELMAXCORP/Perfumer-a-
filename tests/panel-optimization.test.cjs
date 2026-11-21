@@ -19,7 +19,7 @@ function panel(sourcePath = 'panel/app.js') {
       { id: 3, nombre: 'Envase', tipo: 'Decant Vacío', tamano: '5ml', stock: 10, precio: 1 } ],
     ventas: [{ id: 10, fecha: '2026-10-31T18:00:00Z', producto_nombre: 'Venta antigua', monto_total: 100, ganancia_neta: 50, vendedor_email: 'diego@alpha.com', detalles: [], comprobante_url: 'data:image/jpeg;base64,AAAA' },
       { id: 11, fecha: '2026-11-02T18:00:00Z', producto_nombre: 'Venta nueva', monto_total: 200, ganancia_neta: 80, vendedor_email: 'diego@alpha.com', detalles: [], comprobante_url: 'u/receipt.jpg' }],
-    cierres_caja_notas: [], cierres_inventario_ubicaciones: [], inventario_movimientos: [], asistencia: [], contactos: []
+    cierres_caja_notas: [], cierres_inventario_ubicaciones: [], inventario_movimientos: [], asistencia: [], contactos: [], solicitudes_medicion_ml: []
   };
   let sandbox, authListener, failVenta = false, signatures = 0, deferTable = null, release = null;
   function query(table) {
@@ -99,13 +99,13 @@ test('entrada: inventario y asistencia independientes, sin historial ni cierres'
   const before=p.requests.length; await p.run('cargarTodo()'); assert.equal(p.requests.length,before);
 });
 
-test('comparación reproducible del respaldo: inicio 9 → 5; refresco tras escritura 9 → 3', async t => {
+test('comparación reproducible del respaldo: inicio 9 → 6; refresco tras escritura 9 → 3', async t => {
   const backup = '.local-backups/alpha-before-optimization/panel/app.js';
   if (!fs.existsSync(backup)) { t.skip('El respaldo local no se distribuye'); return; }
   const before = panel(backup), after = panel();
   await before.run('cargarTodo()'); await new Promise(resolve=>setImmediate(resolve));
   await after.run('iniciarApp()');
-  assert.equal(before.requests.length,9); assert.equal(after.requests.length,5);
+  assert.equal(before.requests.length,9); assert.equal(after.requests.length,6);
   before.requests.length=0; after.requests.length=0;
   after.run('datos.privateCache.clear()');
   await before.run('cargarTodo()'); await new Promise(resolve=>setImmediate(resolve));
@@ -309,6 +309,9 @@ test('gestión de inventario: cada acción usa el id real de la fila', async () 
   assert.match(abierto, /agregarFrascoAbierto\(2\)/);
   assert.match(abierto, /marcarComoVacioPorId\(2, 1\)/);
   assert.match(abierto, /eliminarProductoPorId\(2\)/);
+  assert.match(abierto, /ajustarMlFrascoAbierto\(2, 'mlReal-2'\)/);
+  assert.match(abierto, /ponerMlMedicion\('mlReal-2', 25\)/);
+  assert.match(abierto, /ponerMlMedicion\('mlReal-2', 100\)/);
   assert.match(abierto, /eliminarUnPerfumeAbierto\(/);
   assert.ok(abierto.includes(`eliminarUnPerfumeAbierto(${idxAbierto})`));
 
@@ -316,6 +319,83 @@ test('gestión de inventario: cada acción usa el id real de la fila', async () 
   assert.match(envase, /sumarStockOLote\(3\)/);
   assert.match(envase, /marcarComoVacioPorId\(3, 10\)/);
   assert.doesNotMatch(envase, /editarAudioProducto/);
+});
+
+test('medición real: corrige los ml y deja rastro del ajuste', async () => {
+  const p = panel(); await p.run('cargarProductos()');
+  p.tables.productos[1].ml_restantes = 2;
+  p.run("listaProductos.find(x => x.id === 2).ml_restantes = 2");
+  p.node('mlReal-2').value = '25';
+  await p.run("ajustarMlFrascoAbierto(2, 'mlReal-2')");
+  assert.equal(p.tables.productos[1].ml_restantes, 25);
+  assert.equal(p.tables.productos[1].stock, 1);
+  const movimiento = p.tables.inventario_movimientos.at(-1);
+  assert.equal(movimiento.tipo_movimiento, 'ajuste');
+  assert.equal(movimiento.cantidad, 23);
+});
+
+test('vender decants conserva los frascos abiertos que siguen en la fila', async () => {
+  const p = panel(); await p.run('cargarProductos()');
+  p.tables.productos[1].stock = 2;
+  p.run("listaProductos.find(x => x.id === 2).stock = 2");
+  await p.run("reservarStockVenta([{tipo:'Decant',producto_id:2,tamano:'5ml',cantidad:1}])");
+  assert.equal(p.tables.productos[1].ml_restantes, 35);
+  assert.equal(p.tables.productos[1].stock, 2);
+});
+
+test('marcar un frasco abierto como terminado descuenta también sus ml', async () => {
+  const p = panel(); await p.run('cargarProductos()');
+  p.tables.productos[1].stock = 2; p.tables.productos[1].ml_restantes = 60;
+  p.run("const f = listaProductos.find(x => x.id === 2); f.stock = 2; f.ml_restantes = 60;");
+  await p.run("marcarComoVacio(2, 'Abierto', 2)");
+  assert.equal(p.tables.productos[1].stock, 1);
+  assert.equal(p.tables.productos[1].ml_restantes, 30);
+  await p.run("marcarComoVacio(2, 'Abierto', 1)");
+  assert.equal(p.tables.productos[1].stock, 0);
+  assert.equal(p.tables.productos[1].ml_restantes, 0);
+});
+
+test('un vendedor solicita la medición y el inventario no cambia hasta aprobarla', async () => {
+  const p = panel(); await p.run('cargarProductos()');
+  p.run("usuarioActual = { id: 'vendedor', email: 'vendedor@alpha.com' };");
+  p.tables.productos[1].ml_restantes = 2;
+  p.run("listaProductos.find(x => x.id === 2).ml_restantes = 2");
+  p.node('mlReal-2').value = '25';
+  await p.run("ajustarMlFrascoAbierto(2, 'mlReal-2')");
+  assert.equal(p.tables.productos[1].ml_restantes, 2, 'el vendedor no debe aplicar el cambio');
+  assert.equal(p.tables.solicitudes_medicion_ml.length, 1);
+  const solicitud = p.tables.solicitudes_medicion_ml[0];
+  assert.equal(solicitud.estado, 'pendiente');
+  assert.equal(solicitud.ml_anterior, 2);
+  assert.equal(solicitud.ml_solicitado, 25);
+  assert.equal(solicitud.solicitado_por, 'vendedor@alpha.com');
+});
+
+test('un administrador aprueba la solicitud y recién ahí se aplica la medición', async () => {
+  const p = panel(); await p.run('cargarProductos()');
+  p.tables.productos[1].ml_restantes = 2;
+  p.tables.solicitudes_medicion_ml.push({ id: 50, producto_id: 2, producto_nombre: 'Abierto', producto_tamano: '100ml',
+    ubicacion: 'Tienda Local', ml_anterior: 2, ml_solicitado: 25, stock_anterior: 1, stock_solicitado: 1,
+    estado: 'pendiente', solicitado_por: 'vendedor@alpha.com', solicitado_en: '2026-11-20T10:00:00Z' });
+  await p.run('cargarSolicitudes()');
+  await p.run('aprobarSolicitudMedicion(50)');
+  assert.equal(p.tables.productos[1].ml_restantes, 25);
+  assert.equal(p.tables.productos[1].stock, 1);
+  assert.equal(p.tables.solicitudes_medicion_ml[0].estado, 'aprobada');
+  assert.equal(p.tables.solicitudes_medicion_ml[0].revisado_por, 'diego@alpha.com');
+});
+
+test('un administrador rechaza la solicitud y el inventario queda intacto', async () => {
+  const p = panel(); await p.run('cargarProductos()');
+  p.tables.productos[1].ml_restantes = 2;
+  p.tables.solicitudes_medicion_ml.push({ id: 51, producto_id: 2, producto_nombre: 'Abierto', producto_tamano: '100ml',
+    ubicacion: 'Tienda Local', ml_anterior: 2, ml_solicitado: 25, stock_anterior: 1, stock_solicitado: 1,
+    estado: 'pendiente', solicitado_por: 'vendedor@alpha.com', solicitado_en: '2026-11-20T10:00:00Z' });
+  await p.run('cargarSolicitudes()');
+  await p.run('rechazarSolicitudMedicion(51)');
+  assert.equal(p.tables.productos[1].ml_restantes, 2);
+  assert.equal(p.tables.solicitudes_medicion_ml[0].estado, 'rechazada');
+  assert.equal(p.tables.solicitudes_medicion_ml[0].revisado_por, 'diego@alpha.com');
 });
 
 test('la venta libera el botón aunque la meta diaria o el borrador no respondan', async () => {

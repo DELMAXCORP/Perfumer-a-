@@ -21,7 +21,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 
-  <link rel="stylesheet" href="styles.css?v=venta-timeout-1">
+  <link rel="stylesheet" href="styles.css?v=solicitudes-ml-1">
 </head>
 <body>
   <main class="app-shell">
@@ -48,6 +48,7 @@
       <nav class="nav-tabs" aria-label="Secciones principales">
         <button type="button" data-tab="venta" aria-current="page" onclick="mostrarTab('venta')">🛒 Vender</button>
         <button type="button" data-tab="stock" onclick="mostrarTab('stock')">📦 Inventario</button>
+        <button type="button" data-tab="solicitudes" onclick="mostrarTab('solicitudes')">📝 Solicitudes <span id="badgeSolicitudes" class="nav-badge hidden">0</span></button>
         <button type="button" data-tab="cierre" onclick="mostrarTab('cierre')">🧾 Cierre de inventario</button>
         <button type="button" data-tab="historial" onclick="mostrarTab('historial')">📊 Historial y Reportes</button>
         <button type="button" data-tab="asistencia" onclick="mostrarTab('asistencia')">⏱️ Asistencia</button>
@@ -382,6 +383,19 @@
         <div id="gridInventario" class="inv-grid">Cargando catálogo...</div>
       </div>
 
+      <!-- TAB SOLICITUDES -->
+      <div id="tab-solicitudes" class="card hidden">
+        <div class="solicitudes-head">
+          <div>
+            <h3 style="margin:0;">📝 Solicitudes de medición</h3>
+            <p class="solicitudes-sub">Los vendedores pueden medir los ml reales de un frasco abierto. Un administrador revisa y aprueba o rechaza el cambio antes de aplicarlo.</p>
+          </div>
+          <button type="button" class="btn-sec" onclick="cargarSolicitudes()">🔄 Actualizar</button>
+        </div>
+        <div id="solicitudesResumen" class="solicitudes-resumen" aria-live="polite">Cargando solicitudes...</div>
+        <div id="listaSolicitudes" class="solicitudes-lista"></div>
+      </div>
+
       <!-- TAB HISTORIAL -->
       <div id="tab-historial" class="card hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
@@ -654,7 +668,7 @@
   <script src="ticket.js?v=catprinter-compacto-5"></script>
   <script src="../product-metadata.js"></script>
   <script src="../decant-pricing.js"></script>
-  <script src="app.js?v=venta-timeout-1"></script>
+  <script src="app.js?v=solicitudes-ml-1"></script>
 </body>
 </html>
 
