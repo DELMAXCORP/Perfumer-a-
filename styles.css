@@ -395,3 +395,68 @@ dialog::backdrop { background: rgba(4, 12, 24, .66); backdrop-filter: blur(3px);
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Ficha de producto en móvil: vista completa, una columna y controles grandes.
+   Va al final para ganar sobre las reglas anteriores de escritorio y de 760px. */
+@media (max-width: 760px) {
+  .product-dialog {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    border-radius: 0;
+    overscroll-behavior: contain;
+  }
+  .product-dialog > .dialog-close {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top));
+    right: 12px;
+    z-index: 30;
+    float: none;
+    margin: 0;
+    box-shadow: 0 6px 18px rgba(11, 28, 51, .22);
+  }
+  .detail-layout { grid-template-columns: minmax(0, 1fr) !important; }
+  .detail-media {
+    min-height: 260px;
+    padding: 58px 16px 18px;
+  }
+  .detail-media img {
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: min(42dvh, 300px);
+    object-fit: contain;
+  }
+  .detail-media .media-placeholder { width: 100%; height: 220px; font-size: 2.4rem; }
+  .detail-media .mini-decant { width: 62px; height: 150px; }
+  .detail-media .mini-decant::before { width: 26px; height: 32px; top: -32px; }
+  .detail-media .mini-decant::after { top: 60px; font-size: .62rem; }
+  .detail-media .media-note { bottom: 8px; left: 16px; right: 16px; text-align: center; }
+  .detail-copy { padding: 20px 16px 40px; }
+  .detail-copy h2 { padding-right: 0; font-size: clamp(1.75rem, 7vw, 2.4rem); overflow-wrap: anywhere; }
+  .detail-brand { margin-bottom: 14px; }
+  .detail-facts { grid-template-columns: minmax(0, 1fr); margin: 18px 0; }
+  .detail-facts div { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 10px; align-items: start; padding: 9px 0; }
+  .detail-facts dt, .detail-facts dd { margin: 0; }
+  .detail-buy { grid-template-columns: minmax(0, 1fr) !important; gap: 10px; }
+  .detail-buy .quantity-control { width: 100%; grid-template-columns: 52px minmax(0, 1fr) 52px; }
+  .detail-buy .quantity-control input { width: 100%; }
+  .detail-buy .button { width: 100%; min-height: 48px; }
+  .decant-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 10px; }
+  .decant-row .decant-price { text-align: right; }
+  .decant-row button { grid-column: 1 / -1; width: 100%; min-height: 44px; }
+  .notes-pyramid div { grid-template-columns: 74px minmax(0, 1fr); gap: 8px; }
+  .usage-panel { padding: 12px; }
+  .usage-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+  .usage-icon svg { width: 24px; height: 24px; }
+  .product-media { height: 175px; }
+  .card-actions .button { min-height: 44px; }
+}
+@media (max-width: 380px) {
+  .detail-media { padding-left: 12px; padding-right: 12px; }
+  .detail-copy { padding-left: 14px; padding-right: 14px; }
+  .detail-facts div { grid-template-columns: 88px minmax(0, 1fr); }
+  .decant-size { font-size: .9rem; }
+}
