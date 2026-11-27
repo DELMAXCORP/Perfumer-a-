@@ -14,7 +14,7 @@ Revisa primero la cola: una impresión pendiente puede salir al reconectar. **Vo
 
 La página no puede detectar el estado de CatPrinter ni reconectar su enlace Bluetooth directamente. Estos accesos usan los [URI oficiales de Configuración de Windows](https://learn.microsoft.com/en-us/windows/apps/develop/launch/launch-settings). La reconexión física debe comprobarse en el equipo real.
 
-Después de registrar una venta aparece **Imprimir ticket**. Cada venta del historial también permite reimprimir. Todos los tickets incluyen el QR local `assets/qr-catalogo-perfumeria.png`, generado para `https://delmaxcorp.github.io/Perfumer-a-/`, centrada y con espacio blanco alrededor. No hay campo de URL ni casilla para quitar el QR.
+Después de registrar una venta aparece **Imprimir ticket**. Cada venta del historial también permite reimprimir. Todos los tickets incluyen el QR local `assets/qr-catalogo-perfumeria.png`, generado para `https://alpha-store-6qk.pages.dev`, centrada y con espacio blanco alrededor. No hay campo de URL ni casilla para quitar el QR.
 
 La impresión espera a que la imagen esté cargada y decodificada. Si falla, muestra un aviso y no abre un ticket sin QR. La ruta se resuelve desde `panel/ticket.js`, conservando el prefijo del proyecto en GitHub Pages. El nuevo QR codifica directamente ese enlace y no requiere servicios externos para imprimirse.
 

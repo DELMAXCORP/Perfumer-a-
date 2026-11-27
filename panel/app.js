@@ -2561,7 +2561,7 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
 
     // QR de la tienda online: se genera en vivo con la librería qrcode (CDN),
     // sin depender de imágenes guardadas en assets.
-    const URL_TIENDA_ONLINE = 'https://delmaxcorp.github.io/Perfumer-a-/';
+    const URL_TIENDA_ONLINE = 'https://alpha-store-6qk.pages.dev';
 
     function abrirModalQRTienda() {
       document.getElementById('modalQRTienda').classList.remove('hidden');
