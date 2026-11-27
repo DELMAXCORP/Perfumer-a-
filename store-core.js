@@ -88,7 +88,7 @@
     );
     const { amount } = cartTotals(cart);
     return [
-      `🛒 Hola, ${storeName}. Quisiera consultar este pedido:`,
+      `🛒 Hola, ${storeName}. Quisiera realizar este pedido online con asesoría personalizada:`,
       '',
       ...header,
       ...lines,

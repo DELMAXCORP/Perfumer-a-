@@ -398,6 +398,35 @@ test('un administrador rechaza la solicitud y el inventario queda intacto', asyn
   assert.equal(p.tables.solicitudes_medicion_ml[0].revisado_por, 'diego@alpha.com');
 });
 
+test('contactos marketing: métricas, filtro por estado y WhatsApp directo', async () => {
+  const p = panel();
+  p.tables.contactos.push(
+    { id: 1, created_at: '2026-11-20T10:00:00Z', nombre: 'Ana', telefono: '927025595', forma_entrega: 'Delivery', estado: 'pendiente', pedido_resumen: '1. Perfume — S/ 100.00' },
+    { id: 2, created_at: '2026-11-21T10:00:00Z', nombre: 'Luis', telefono: '987654321', forma_entrega: 'Tienda', estado: 'exitosa', pedido_resumen: '1. Decant — S/ 25.00' }
+  );
+  await p.run('cargarContactosMarketing()');
+  const stats = p.node('statsContactos').innerHTML;
+  assert.match(stats, /Total/);
+  assert.match(stats, /<strong>1<\/strong>/);
+  const lista = p.node('tablaContactos').innerHTML;
+  assert.match(lista, /Ana/);
+  assert.match(lista, /\+51 927 025 595/);
+  assert.match(lista, /https:\/\/wa\.me\/51927025595/);
+  p.run("filtrarContactosMarketing('exitosa')");
+  const filtrado = p.node('tablaContactos').innerHTML;
+  assert.doesNotMatch(filtrado, /Ana/);
+  assert.match(filtrado, /Luis/);
+});
+
+test('contactos marketing: el administrador exporta el listado a Excel', async () => {
+  const p = panel();
+  p.tables.contactos.push({ id: 3, created_at: '2026-11-20T10:00:00Z', nombre: 'Ana', telefono: '927025595', forma_entrega: 'Delivery', estado: 'exitosa', pedido_resumen: 'Pedido' });
+  await p.run('cargarContactosMarketing()');
+  const antes = p.files.length;
+  await p.run('exportarContactosMarketing()');
+  assert.equal(p.files.length, antes + 1);
+});
+
 test('la venta libera el botón aunque la meta diaria o el borrador no respondan', async () => {
   const p = panel(); await p.run('cargarProductos()');
   p.run('comprobarMetaVentasDiaria=()=>new Promise(()=>{}); borrarBorradorVenta=()=>new Promise(()=>{});');

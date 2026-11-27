@@ -460,3 +460,30 @@ dialog::backdrop { background: rgba(4, 12, 24, .66); backdrop-filter: blur(3px);
   .detail-facts div { grid-template-columns: 88px minmax(0, 1fr); }
   .decant-size { font-size: .9rem; }
 }
+
+/* Portada orientada a la compra */
+.hero-trust { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 16px 0 0; color: var(--muted); font-size: .76rem; }
+.hero-trust span { display: inline-flex; align-items: center; gap: 5px; }
+.how-to-buy, .quick-shop { padding: 30px max(20px, calc((100% - 1180px) / 2)); }
+.how-to-buy .section-heading h2, .quick-shop .section-heading h2 { font-size: clamp(1.7rem, 4vw, 2.4rem); }
+.quick-shop { padding-bottom: 6px; }
+.steps { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.steps li { padding: 16px; display: grid; grid-template-columns: 38px 1fr; column-gap: 12px; align-items: start; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
+.step-num { grid-row: span 2; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--navy); font-family: var(--serif); font-size: 1.1rem; }
+.steps strong { color: var(--navy); font-size: .92rem; }
+.steps li > span:last-child { grid-column: 2; margin-top: 4px; color: var(--muted); font-size: .78rem; line-height: 1.45; }
+.quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.quick-card { padding: 16px; display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--line); border-radius: 14px; background: var(--cream); color: var(--ink); text-decoration: none; transition: border-color .15s ease, transform .15s ease; }
+.quick-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+.quick-ico { font-size: 1.5rem; line-height: 1; }
+.quick-card strong { color: var(--navy); font-size: .95rem; }
+.quick-card small { color: var(--gold); font-size: .72rem; font-weight: 800; }
+@media (max-width: 760px) {
+  .how-to-buy, .quick-shop { padding: 26px 20px; }
+  .steps { grid-template-columns: 1fr; }
+  .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hero-trust { font-size: .72rem; }
+}
+@media (max-width: 380px) {
+  .quick-grid { grid-template-columns: 1fr; }
+}

@@ -665,3 +665,45 @@
 .solicitud-acciones { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
 .solicitud-acciones button { flex:1 1 120px; width:auto; min-height:38px; margin:0; padding:8px; font-size:.74rem; }
 @media (max-width:640px) { .solicitudes-lista { grid-template-columns:1fr; } }
+
+/* Contactos de marketing */
+.contactos-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.contactos-sub { margin:5px 0 0; color:var(--muted); font-size:.76rem; line-height:1.45; max-width:680px; }
+.contactos-toolbar { display:flex; flex-wrap:wrap; gap:6px; }
+.contactos-toolbar button { width:auto; margin:0; padding:8px 12px; font-size:.76rem; }
+.contactos-stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:8px; margin:12px 0; }
+.contacto-stat { display:flex; flex-direction:column; gap:2px; padding:10px 12px; text-align:left; border:1px solid rgba(246,240,231,.12); border-radius:10px; background:rgba(2,19,38,.45); color:var(--muted); cursor:pointer; }
+.contacto-stat span { font-size:.7rem; }
+.contacto-stat strong { color:var(--ivory); font-size:1.35rem; line-height:1.1; }
+.contacto-stat.active { border-color:var(--gold); background:rgba(212,175,55,.12); }
+.contacto-stat.estado-pendiente.active { border-color:#e0a800; }
+.contacto-stat.estado-exitosa.active { border-color:#2ea05a; }
+.contacto-stat.estado-descartada.active { border-color:#c0392b; }
+.contactos-filtros { display:grid; grid-template-columns:minmax(180px, 1fr) auto; gap:10px; align-items:center; margin-bottom:12px; }
+.contactos-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.contactos-chips .chip-btn { min-height:38px; padding:7px 11px; font-size:.74rem; }
+.contactos-lista { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:10px; }
+.contacto-card { display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid rgba(246,240,231,.12); border-left:3px solid var(--muted); border-radius:10px; background:rgba(2,19,38,.45); }
+.contacto-card.estado-pendiente { border-left-color:#e0a800; }
+.contacto-card.estado-exitosa { border-left-color:#2ea05a; }
+.contacto-card.estado-descartada { border-left-color:#c0392b; }
+.contacto-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+.contacto-head > div { display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-width:0; }
+.contacto-head strong { color:var(--ivory); font-size:.9rem; overflow-wrap:anywhere; }
+.contacto-head time { color:var(--muted); font-size:.68rem; white-space:nowrap; }
+.contacto-badge { padding:2px 7px; border-radius:999px; font-size:.62rem; font-weight:700; text-transform:uppercase; }
+.contacto-badge.pendiente { color:#f0c24b; background:rgba(224,168,0,.16); }
+.contacto-badge.exitosa { color:#7fd49b; background:rgba(46,160,90,.16); }
+.contacto-badge.descartada { color:#ff9b90; background:rgba(192,57,43,.16); }
+.contacto-datos { display:flex; flex-wrap:wrap; gap:8px 14px; color:var(--muted); font-size:.74rem; }
+.contacto-datos a { color:var(--gold-light); text-decoration:none; }
+.contacto-pedido summary { color:var(--gold-light); font-size:.74rem; cursor:pointer; }
+.contacto-pedido pre { max-height:190px; margin:8px 0 0; padding:8px; overflow:auto; border-radius:7px; background:rgba(2,19,38,.6); color:var(--muted); font-size:.68rem; line-height:1.4; white-space:pre-wrap; overflow-wrap:anywhere; }
+.contacto-acciones { display:flex; flex-wrap:wrap; gap:6px; margin-top:auto; }
+.contacto-acciones button { flex:1 1 120px; width:auto; min-height:38px; margin:0; padding:8px; font-size:.72rem; }
+.contactos-error { color:#ff9b90; font-size:.8rem; }
+@media (max-width:640px) {
+  .contactos-filtros { grid-template-columns:1fr; }
+  .contactos-lista { grid-template-columns:1fr; }
+  .contacto-acciones button { flex:1 1 100%; }
+}

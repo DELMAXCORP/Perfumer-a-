@@ -540,7 +540,7 @@
   function renderRowStatus() {
     const count = favoriteProducts().length;
     elements.requestFavorites.disabled = count === 0;
-    elements.requestFavorites.textContent = count === 1 ? '❤ Pedir mi favorito por WhatsApp' : `❤ Pedir ${count} favoritos por WhatsApp`;
+    elements.requestFavorites.textContent = count === 1 ? '❤ Consultar mi favorito por WhatsApp' : `❤ Consultar ${count} favoritos por WhatsApp`;
   }
 
   // Ficha estructurada para Google: catálogo con marca, precio y disponibilidad reales.
@@ -694,14 +694,14 @@
       if (decant) addToCart(decant, 1);
     }));
     elements.productDetail.querySelectorAll('[data-consult-size]').forEach(button => button.addEventListener('click', () => {
-      openWhatsapp(`Hola, ${STORE_CONFIG.name}. Quisiera consultar el precio del decant de ${button.dataset.consultSize} de ${product.name}.`);
+      openWhatsapp(`Hola, ${STORE_CONFIG.name}. Quisiera asesoría personalizada para mi compra: ¿cuánto cuesta el decant de ${button.dataset.consultSize} de ${product.name}?`);
     }));
     const quantityInput = document.getElementById('detail-quantity');
     elements.productDetail.querySelector('[data-detail-decrease]').addEventListener('click', () => { quantityInput.value = Math.max(1, Number(quantityInput.value) - 1); });
     elements.productDetail.querySelector('[data-detail-increase]').addEventListener('click', () => { quantityInput.value = Math.min(99, Number(quantityInput.value) + 1); });
     quantityInput.addEventListener('change', () => { quantityInput.value = Math.max(1, Math.min(99, Math.floor(Number(quantityInput.value) || 1))); });
     document.getElementById('detail-add').addEventListener('click', () => addToCart(product, Number(quantityInput.value) || 1));
-    document.getElementById('detail-consult').addEventListener('click', () => openWhatsapp(`Hola, ${STORE_CONFIG.name}. Quisiera más información sobre ${product.name} (${product.presentationLabel} ${product.size}).`));
+    document.getElementById('detail-consult').addEventListener('click', () => openWhatsapp(`Hola, ${STORE_CONFIG.name}. Quisiera asesoría personalizada antes de comprar ${product.name} (${product.presentationLabel} ${product.size}).`));
 
     if (!elements.productDialog.open) elements.productDialog.showModal();
     elements.productDialog.scrollTop = 0;
@@ -1009,6 +1009,14 @@
   /* CTAs de WhatsApp con mensaje prellenado: dejan al cliente listo para
      enviar y al bot con la intención clasificada desde el primer mensaje. */
   document.querySelectorAll('[data-wa-message]').forEach(button => button.addEventListener('click', () => openWhatsapp(button.dataset.waMessage)));
+
+  /* Atajos de la portada: filtran el catálogo y llevan a la colección. */
+  document.querySelectorAll('[data-categoria]').forEach(enlace => enlace.addEventListener('click', () => {
+    if (!elements.category) return;
+    elements.category.value = enlace.dataset.categoria;
+    renderCatalog();
+  }));
+
   elements.favoritesToggle.addEventListener('click', () => {
     elements.favoritesToggle.setAttribute('aria-pressed', String(!favoritesOnly()));
     renderCatalog();
@@ -1016,7 +1024,7 @@
   elements.requestFavorites.addEventListener('click', () => {
     const names = favoriteProducts().map(product => `• ${product.name} (${product.brand})`);
     if (!names.length) return;
-    openWhatsapp(`Hola, ${STORE_CONFIG.name}. Estos son mis favoritos del catálogo y quisiera precios y disponibilidad:\n${names.join('\n')}`);
+    openWhatsapp(`Hola, ${STORE_CONFIG.name}. Quisiera asesoría personalizada para mi compra sobre estos favoritos:\n${names.join('\n')}`);
   });
   document.getElementById('year').textContent = String(new Date().getFullYear());
   renderBag();

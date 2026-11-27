@@ -21,7 +21,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 
-  <link rel="stylesheet" href="styles.css?v=qr-link-1">
+  <link rel="stylesheet" href="styles.css?v=contactos-1">
 </head>
 <body>
   <main class="app-shell">
@@ -486,13 +486,24 @@
 
       <!-- TAB CONTACTOS -->
       <div id="tab-contactos" class="card hidden">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
-          <h3 style="margin:0;">📱 Contactos de Marketing</h3>
-          <button type="button" class="btn-sec" onclick="cargarContactosMarketing()" style="padding:8px 14px; font-size:0.8rem;">🔄 Actualizar</button>
+        <div class="contactos-head">
+          <div>
+            <h3 style="margin:0;">📱 Contactos de Marketing</h3>
+            <p class="contactos-sub">Pedidos enviados por WhatsApp. Marca como <strong>exitosa</strong> los que concretaron la compra para usarlos en campañas de recordatorios, promociones y combos.</p>
+          </div>
+          <div class="contactos-toolbar">
+            <button type="button" class="btn-sec" onclick="exportarContactosMarketing()">⬇️ Exportar Excel</button>
+            <button type="button" class="btn-sec" onclick="cargarContactosMarketing()">🔄 Actualizar</button>
+          </div>
         </div>
-        <p style="font-size:0.8rem; color:var(--muted);">Solo los contactos marcados como <strong>exitosa</strong> se usan para envíos de recordatorios, promociones, combos o nuevos ingresos.</p>
-        <div id="statsContactos" style="margin:8px 0; font-size:0.8rem; color:var(--gold-light);"></div>
-        <div id="tablaContactos" style="overflow-x:auto;">Cargando contactos...</div>
+        <div class="contactos-stats" id="statsContactos"></div>
+        <div class="contactos-filtros">
+          <div class="search-box" style="margin:0;">
+            <input type="search" id="buscarContactos" placeholder="Buscar por nombre o teléfono..." oninput="renderizarContactosMarketing()" aria-label="Buscar contactos">
+          </div>
+          <div class="contactos-chips" id="chipsContactos" role="group" aria-label="Filtrar contactos por estado"></div>
+        </div>
+        <div id="tablaContactos" class="contactos-lista">Cargando contactos...</div>
       </div>
     </section>
 
@@ -668,7 +679,7 @@
   <script src="ticket.js?v=catprinter-compacto-5"></script>
   <script src="../product-metadata.js"></script>
   <script src="../decant-pricing.js"></script>
-  <script src="app.js?v=qr-link-1"></script>
+  <script src="app.js?v=contactos-1"></script>
 </body>
 </html>
 

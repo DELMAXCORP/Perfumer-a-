@@ -122,6 +122,8 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     let cierresInventarioCache = [];
     let listaProductos = [];
     let solicitudesMedicion = [];
+    let contactosMarketing = [];
+    let filtroEstadoContactos = 'todos';
     const aperturasEnProceso = new Set();
     let gruposAbiertosInventario = [];
     let carritoVenta = [];
@@ -4615,51 +4617,162 @@ const SUPABASE_URL = 'https://zmvuueizrehqibjjcbgd.supabase.co';
     }
 
 
+    function telefonoContactoDigitos(valor) {
+      return String(valor ?? '').replace(/\D/g, '');
+    }
+
+    function telefonoContactoTexto(valor) {
+      const digitos = telefonoContactoDigitos(valor);
+      if (digitos.length === 9) return `+51 ${digitos.slice(0, 3)} ${digitos.slice(3, 6)} ${digitos.slice(6)}`;
+      return String(valor || '—');
+    }
+
+    function enlaceWhatsAppContacto(valor) {
+      const digitos = telefonoContactoDigitos(valor);
+      return digitos.length === 9 ? `https://wa.me/51${digitos}` : '';
+    }
+
     async function cargarContactosMarketing() {
       const cont = document.getElementById('tablaContactos');
-      const stats = document.getElementById('statsContactos');
       if (!cont) return;
-      cont.innerHTML = 'Cargando contactos...';
+      cont.innerHTML = '<p class="empty-msg">Cargando contactos...</p>';
       try {
         const data = await leerLista('contactos', () => client.from('contactos').select(CONTACTOS_COLUMNAS).order('created_at', { ascending: false }).order('id', { ascending: false }));
-        const error = null;
-        if (error) { cont.innerHTML = '<p style="color:#dc3545;">' + escapeHtml(error.message) + '</p>'; return; }
-        const rows = data || [];
-        const pending = rows.filter(r => r.estado === 'pendiente').length;
-        const ok = rows.filter(r => r.estado === 'exitosa').length;
-        const discarded = rows.filter(r => r.estado === 'descartada').length;
-        if (stats) stats.textContent = 'Total: ' + rows.length + ' · Pendientes: ' + pending + ' · Exitosas: ' + ok + ' · Descartadas: ' + discarded;
-        if (!rows.length) { cont.innerHTML = '<p style="color:var(--muted);">Sin contactos registrados.</p>'; return; }
-        let html = '<table style="width:100%; border-collapse:collapse; font-size:0.8rem;"><thead><tr>'
-          + '<th style="text-align:left; padding:8px; border-bottom:1px solid rgba(246,240,231,.15); color:var(--gold-light);">Fecha</th>'
-          + '<th style="text-align:left; padding:8px; border-bottom:1px solid rgba(246,240,231,.15); color:var(--gold-light);">Nombre</th>'
-          + '<th style="text-align:left; padding:8px; border-bottom:1px solid rgba(246,240,231,.15); color:var(--gold-light);">Teléfono</th>'
-          + '<th style="text-align:left; padding:8px; border-bottom:1px solid rgba(246,240,231,.15); color:var(--gold-light);">Entrega</th>'
-          + '<th style="text-align:left; padding:8px; border-bottom:1px solid rgba(246,240,231,.15); color:var(--gold-light);">Estado</th>'
-          + '<th style="text-align:left; padding:8px; border-bottom:1px solid rgba(246,240,231,.15); color:var(--gold-light);">Pedido</th>'
-          + '<th style="text-align:left; padding:8px; border-bottom:1px solid rgba(246,240,231,.15); color:var(--gold-light);">Acciones</th>'
-          + '</tr></thead><tbody>';
-        rows.forEach(r => {
-          const fecha = new Date(r.created_at).toLocaleString('es-PE');
-          html += '<tr>'
-            + '<td style="padding:8px; border-bottom:1px solid rgba(246,240,231,.08);">' + escapeHtml(fecha) + '</td>'
-            + '<td style="padding:8px; border-bottom:1px solid rgba(246,240,231,.08);">' + escapeHtml(r.nombre) + '</td>'
-            + '<td style="padding:8px; border-bottom:1px solid rgba(246,240,231,.08);">' + escapeHtml(r.telefono) + '</td>'
-            + '<td style="padding:8px; border-bottom:1px solid rgba(246,240,231,.08);">' + escapeHtml(r.forma_entrega || '-') + '</td>'
-            + '<td style="padding:8px; border-bottom:1px solid rgba(246,240,231,.08);">' + escapeHtml(r.estado) + '</td>'
-            + '<td style="padding:8px; border-bottom:1px solid rgba(246,240,231,.08); font-size:0.72rem; color:var(--muted); white-space:pre-wrap; max-width:260px;">' + escapeHtml(r.pedido_resumen || '') + '</td>'
-            + '<td style="padding:8px; border-bottom:1px solid rgba(246,240,231,.08);">'
-            + (r.estado !== 'exitosa' ? '<button onclick="marcarContactoMarketing(\'' + r.id + '\',\'exitosa\')" style="margin:2px; padding:4px 8px; font-size:0.7rem; border-radius:6px; border:1px solid #28a745; background:transparent; color:#28a745; cursor:pointer;">Exitosa</button>' : '')
-            + (r.estado !== 'descartada' ? '<button onclick="marcarContactoMarketing(\'' + r.id + '\',\'descartada\')" style="margin:2px; padding:4px 8px; font-size:0.7rem; border-radius:6px; border:1px solid #dc3545; background:transparent; color:#dc3545; cursor:pointer;">Descartar</button>' : '')
-            + '<button onclick="eliminarContactoMarketing(\'' + r.id + '\')" style="margin:2px; padding:4px 8px; font-size:0.7rem; border-radius:6px; border:1px solid #6c757d; background:transparent; color:#6c757d; cursor:pointer;">Eliminar</button>'
-            + '</td></tr>';
-        });
-        html += '</tbody></table>';
-        cont.innerHTML = html;
+        contactosMarketing = data || [];
+        renderizarContactosMarketing();
       } catch (e) {
         if (e instanceof datos.StaleRead) return;
-        cont.innerHTML = '<p style="color:#dc3545;">' + escapeHtml(e && e.message ? e.message : String(e)) + '</p>';
+        contactosMarketing = [];
+        cont.innerHTML = '<p class="contactos-error">' + escapeHtml(e && e.message ? e.message : String(e)) + '</p>';
       }
+    }
+
+    function renderizarContactosMarketing() {
+      const cont = document.getElementById('tablaContactos');
+      const stats = document.getElementById('statsContactos');
+      const chips = document.getElementById('chipsContactos');
+      if (!cont) return;
+
+      const estados = [
+        { clave: 'pendiente', texto: 'Pendientes', icono: '⏳' },
+        { clave: 'exitosa', texto: 'Exitosas', icono: '✅' },
+        { clave: 'descartada', texto: 'Descartadas', icono: '🚫' }
+      ];
+      const conteo = clave => contactosMarketing.filter(c => c.estado === clave).length;
+
+      if (stats) {
+        stats.innerHTML = [
+          `<button type="button" class="contacto-stat${filtroEstadoContactos === 'todos' ? ' active' : ''}" onclick="filtrarContactosMarketing('todos')"><span>📋 Total</span><strong>${contactosMarketing.length}</strong></button>`,
+          ...estados.map(e => `<button type="button" class="contacto-stat estado-${e.clave}${filtroEstadoContactos === e.clave ? ' active' : ''}" onclick="filtrarContactosMarketing('${e.clave}')"><span>${e.icono} ${e.texto}</span><strong>${conteo(e.clave)}</strong></button>`)
+        ].join('');
+      }
+      if (chips) {
+        chips.innerHTML = [
+          `<button type="button" class="chip-btn${filtroEstadoContactos === 'todos' ? ' active' : ''}" onclick="filtrarContactosMarketing('todos')">Todos</button>`,
+          ...estados.map(e => `<button type="button" class="chip-btn${filtroEstadoContactos === e.clave ? ' active' : ''}" onclick="filtrarContactosMarketing('${e.clave}')">${e.icono} ${e.texto} <b>${conteo(e.clave)}</b></button>`)
+        ].join('');
+      }
+
+      const buscar = String(document.getElementById('buscarContactos')?.value || '').trim().toLowerCase();
+      const filtrados = contactosMarketing.filter(c => {
+        if (filtroEstadoContactos !== 'todos' && c.estado !== filtroEstadoContactos) return false;
+        if (!buscar) return true;
+        const telefono = telefonoContactoDigitos(c.telefono);
+        return [c.nombre, c.telefono, telefono, c.forma_entrega].some(v => String(v || '').toLowerCase().includes(buscar));
+      });
+
+      if (!filtrados.length) {
+        cont.innerHTML = `<p class="empty-msg">${contactosMarketing.length ? 'No hay contactos con este filtro.' : 'Sin contactos registrados todavía.'}</p>`;
+        return;
+      }
+
+      cont.innerHTML = filtrados.map(c => {
+        const estado = ['pendiente', 'exitosa', 'descartada'].includes(c.estado) ? c.estado : 'pendiente';
+        const etiqueta = { pendiente: 'Pendiente', exitosa: 'Exitosa', descartada: 'Descartada' }[estado];
+        const fecha = c.created_at ? new Date(c.created_at).toLocaleString('es-PE') : 'Sin fecha';
+        const telefono = String(c.telefono || '');
+        const wa = enlaceWhatsAppContacto(telefono);
+        const resumen = String(c.pedido_resumen || '').trim();
+        const lineas = resumen ? resumen.split('\n').filter(linea => linea.trim()).length : 0;
+        return `<article class="contacto-card estado-${estado}">
+          <header class="contacto-head">
+            <div>
+              <strong>${escapeHtml(c.nombre || 'Sin nombre')}</strong>
+              <span class="contacto-badge ${estado}">${etiqueta}</span>
+            </div>
+            <time>${escapeHtml(fecha)}</time>
+          </header>
+          <div class="contacto-datos">
+            <span>${wa ? `<a href="${wa}" target="_blank" rel="noopener noreferrer" title="Escribir por WhatsApp">📱 ${escapeHtml(telefonoContactoTexto(telefono))}</a>` : `📱 ${escapeHtml(telefono || '—')}`}</span>
+            <span>📦 ${escapeHtml(c.forma_entrega || 'Entrega sin especificar')}</span>
+          </div>
+          ${resumen ? `<details class="contacto-pedido"><summary>Ver pedido (${lineas} ${lineas === 1 ? 'línea' : 'líneas'})</summary><pre>${escapeHtml(resumen)}</pre></details>` : ''}
+          <div class="contacto-acciones">
+            ${estado !== 'exitosa' ? `<button type="button" class="btn-add" onclick="marcarContactoMarketing('${c.id}','exitosa')">✅ Exitosa</button>` : ''}
+            ${estado !== 'descartada' ? `<button type="button" class="btn-sec" onclick="marcarContactoMarketing('${c.id}','descartada')">🚫 Descartar</button>` : ''}
+            ${wa ? `<button type="button" class="btn-sec" onclick="abrirWhatsAppContacto('${c.id}')">💬 WhatsApp</button>` : ''}
+            <button type="button" class="btn-sec" onclick="copiarTelefonoContacto('${c.id}')">📋 Copiar teléfono</button>
+            <button type="button" class="btn-del" onclick="eliminarContactoMarketing('${c.id}')">🗑️ Eliminar</button>
+          </div>
+        </article>`;
+      }).join('');
+    }
+
+    function filtrarContactosMarketing(estado) {
+      filtroEstadoContactos = estado;
+      renderizarContactosMarketing();
+    }
+
+    function contactoPorId(id) {
+      return contactosMarketing.find(c => String(c.id) === String(id));
+    }
+
+    function abrirWhatsAppContacto(id) {
+      const contacto = contactoPorId(id);
+      const enlace = contacto ? enlaceWhatsAppContacto(contacto.telefono) : '';
+      if (!enlace) return alert('Este contacto no tiene un teléfono de 9 dígitos válido.');
+      window.open(enlace, '_blank', 'noopener,noreferrer');
+    }
+
+    async function copiarTelefonoContacto(id) {
+      const contacto = contactoPorId(id);
+      if (!contacto) return;
+      const texto = String(contacto.telefono || '');
+      try {
+        await navigator.clipboard.writeText(texto);
+        mostrarAviso('Teléfono copiado.', 'success');
+      } catch {
+        const campo = document.createElement('textarea');
+        campo.value = texto;
+        campo.setAttribute('readonly', '');
+        campo.style.position = 'fixed';
+        campo.style.opacity = '0';
+        document.body.appendChild(campo);
+        campo.select();
+        document.execCommand('copy');
+        campo.remove();
+        mostrarAviso('Teléfono copiado.', 'success');
+      }
+    }
+
+    function exportarContactosMarketing() {
+      if (!esAdmin()) return alert('Acceso denegado: Solo los administradores pueden exportar contactos.');
+      if (!contactosMarketing.length) return alert('No hay contactos para exportar.');
+      const filas = [['Fecha', 'Nombre', 'Teléfono', 'Entrega', 'Estado', 'Pedido']];
+      contactosMarketing.forEach(c => filas.push([
+        c.created_at ? new Date(c.created_at).toLocaleString('es-PE') : '',
+        c.nombre || '',
+        telefonoContactoTexto(c.telefono),
+        c.forma_entrega || '',
+        c.estado || '',
+        c.pedido_resumen || ''
+      ]));
+      const hoja = XLSX.utils.aoa_to_sheet(filas);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, 'Contactos');
+      const fechaHoy = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(libro, `Contactos_ALPHA_${fechaHoy}.xlsx`);
+      mostrarAviso('Contactos exportados a Excel.', 'success');
     }
 
     async function marcarContactoMarketing(id, estado) {

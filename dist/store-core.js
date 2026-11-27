@@ -72,17 +72,30 @@
     }), { units: 0, amount: 0 });
   }
 
-  function createOrderSummary(cart, storeName) {
-    const lines = cart.map((item, index) => `${index + 1}. ${item.quantity} × ${item.name} — ${item.presentationLabel}, ${item.size} — S/ ${(item.price * item.quantity).toFixed(2)}`);
+  function createOrderSummary(cart, storeName, customer) {
+    const customerName = customer && customer.name ? String(customer.name).trim() : '';
+    const customerPhone = customer && customer.phone ? String(customer.phone).trim() : '';
+    const customerDelivery = customer && customer.delivery ? String(customer.delivery).trim() : '';
+    const header = [];
+    if (customerName || customerPhone) {
+      if (customerName) header.push(`👤 Cliente: ${customerName}`);
+      if (customerPhone) header.push(`📱 Teléfono: ${customerPhone}`);
+      if (customerDelivery) header.push(`📦 Entrega: ${customerDelivery}`);
+      header.push('');
+    }
+    const lines = cart.map((item, index) =>
+      `${index + 1}. ${item.name} — ${item.presentationLabel}${item.presentation === 'decant' ? ` ${item.size}` : ''} — S/ ${(item.price * item.quantity).toFixed(2)} (×${item.quantity})`
+    );
     const { amount } = cartTotals(cart);
     return [
-      `Hola, ${storeName}. Quisiera consultar este pedido:`,
+      `🛒 Hola, ${storeName}. Quisiera realizar este pedido online con asesoría personalizada:`,
       '',
+      ...header,
       ...lines,
       '',
-      `Total referencial: S/ ${amount.toFixed(2)}`,
+      `💰 Total: S/ ${amount.toFixed(2)}`,
       '',
-      'Entiendo que este mensaje no confirma disponibilidad, pago ni compra.'
+      'La disponibilidad, el pago y la entrega se confirman durante la atención por WhatsApp. ✅'
     ].join('\n');
   }
 
